@@ -61,7 +61,7 @@ export const WORKS = [
   {
     no: "08", wing: "light", title: "After Turner — Rain, Steam and Speed", ko: "비, 증기, 속도",
     medium: "Vapor flow field · after Turner (1844, public domain)", year: "2026",
-    note: "터너의 금빛 폭풍 속에서 증기기관차가 다가온다. 안개와 비와 증기가 한 덩어리의 유동장이 되어 소용돌이치고, 기차는 소실점에서부터 화실의 불꽃을 키우며 끝없이 달려온다. 산업 시대의 속도를 그린 최초의 그림, 그 속도 그대로.",
+    note: "터너의 금빛 폭풍 속에서 증기기관차가 다가온다. 안개와 비와 증기가 한 덩어리의 유동장이 되어 소용돌이치고, 기차는 소실점에서부터 화실의 불꽃을 키우며 끝없이 달려온다. 산업 시대의 속도를 화폭에 담아낸 가장 이른 그림 중 하나 — 그 속도 그대로.",
     hint: "드래그로 안개를 휘저으세요 · 클릭으로 기적 소리 없는 증기",
     module: "./pieces/08-rain-steam-speed.js",
   },
@@ -70,7 +70,7 @@ export const WORKS = [
   {
     no: "09", wing: "dream", title: "After Michelangelo — Creation of Adam", ko: "아담의 창조",
     medium: "Spark of life · after Michelangelo (c.1512, public domain)", year: "2026",
-    note: "시스티나 천장화에서 가장 유명한 4센티미터 — 닿을 듯 닿지 않는 두 손끝의 간극. 커서를 그 사이에 가져가면 정전기가 일고, 간극을 이어주면 생명의 불꽃이 방전된다. 신이 아담에게 건넨 그 순간을, 당신의 손으로.",
+    note: "시스티나 천장화에서 가장 유명한 순간 — 닿을 듯 닿지 않는 두 손끝의 간극. 커서를 그 사이에 가져가면 정전기가 일고, 간극을 이어주면 생명의 불꽃이 방전된다. 신이 아담에게 건넨 그 순간을, 당신의 손으로.",
     hint: "두 손끝 사이에 커서를 · 간극을 이으면 불꽃이 튑니다",
     module: "./pieces/09-creation-of-adam.js", asset: "assets/targets/09-creation-of-adam.jpg",
   },

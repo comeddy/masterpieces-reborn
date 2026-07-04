@@ -3,7 +3,7 @@
 // 크림색 캔버스 위 칸딘스키 어휘의 도형들이 부유·회전하고, 클릭하면 악기처럼 울린다.
 
 let ctx = null, W = 0, H = 0, S = 0, T = 0, reduced = false;
-let audio = null, actx = null, audioTried = false;
+let audio = null, actx = null;
 let shapes = [], ripples = [], trail = [];
 let minM = 1, maxM = 1;
 let tex = null;              // 캐시된 미세 텍스처 오프스크린
@@ -114,15 +114,10 @@ function hit(s, x, y) {
   return d < s.size * (s.type === "triangle" ? 0.7 : 1.0);
 }
 
-// 오디오: 첫 justDown에서 생성, 음소거면 skip
+// 오디오: justDown마다 사운드 ON이고 아직 미생성일 때만 생성
 function ensureAudio() {
-  if (audioTried) return;
-  audioTried = true;
-  if (!audio || !audio.enabled()) return;
-  try {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    actx = new AC();
-  } catch (e) { actx = null; }
+  if (actx || !audio || !audio.enabled()) return;
+  try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { actx = null; }
 }
 function playTone(s) {
   if (!actx) return;
@@ -144,7 +139,7 @@ export default {
     ctx = opts.ctx; W = opts.width; H = opts.height;
     reduced = !!opts.reducedMotion; audio = opts.audio || null;
     T = 0; ripples = []; trail = []; wasDown = false;
-    audioTried = false; actx = null;
+    actx = null;
     shapes = buildShapes();
     layout();
   },

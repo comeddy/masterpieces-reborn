@@ -8,6 +8,7 @@ const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 // ---------- 사운드 전역 토글 (작품엔 getter만 전달) ----------
 let soundOn = false;
+let lastCard = null;   // 뷰어 진입 직전의 카드 (닫을 때 포커스 복원용)
 $(".sound-toggle").addEventListener("click", (e) => {
   soundOn = !soundOn;
   e.currentTarget.setAttribute("aria-pressed", String(soundOn));
@@ -44,7 +45,7 @@ function renderAtrium() {
         <h3 class="card__title">${work.title}</h3>
         <p class="card__ko">${work.ko}</p>
         <p class="card__medium">${work.medium}</p>`;
-      card.addEventListener("click", () => openWork(WORKS.indexOf(work)));
+      card.addEventListener("click", () => { lastCard = card; openWork(WORKS.indexOf(work)); });
       grid.appendChild(card);
     }
     wingsEl.appendChild(sec);
@@ -133,6 +134,7 @@ async function openWork(idx) {
     lastT = performance.now();
     pointer.downTime = 0;
     rafId = requestAnimationFrame(frame);
+    $(".viewer__close").focus();
   } catch (err) {
     console.error(`작품 로드 실패: ${work.module}`, err);
     piece = null;
@@ -156,6 +158,7 @@ async function closeWork() {
   current = -1;
   body.dataset.view = "atrium";
   $("#viewer").setAttribute("aria-hidden", "true");
+  if (lastCard) lastCard.focus();
 }
 
 function step(dir) {
