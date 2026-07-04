@@ -134,6 +134,7 @@ body[data-view="viewer"] .topbar { display: none; }
   position: absolute; inset: 0; display: flex; flex-direction: column; gap: 18px;
   align-items: center; justify-content: center; color: var(--ink-dim); font-size: 14px;
 }
+.viewer__error[hidden] { display: none; }
 .viewer__error button { border: 1px solid var(--line); padding: 10px 24px; border-radius: 3px; }
 
 /* ---- 반응형 ---- */
