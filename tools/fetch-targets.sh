@@ -25,6 +25,8 @@ fetch 04-mona-lisa.jpg       256 "Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_re
 # 화면 표시용 (등불 리빌·프레스코·판화 배경 — 고해상 필요)
 fetch 06-night-watch.jpg     1024 "The_Night_Watch_-_HD.jpg"
 fetch 09-creation-of-adam.jpg 1024 "Michelangelo_-_Creation_of_Adam_(cropped).jpg"
-fetch 12-sudden-shower.jpg   1024 "Hiroshige_-_Evening_Shower_at_Atake_and_the_Great_Bridge.jpg"
+# 원본 960px — Wikimedia는 허용 목록의 썸네일 크기만 리사이즈함(768/1024는 원본 그대로 반환).
+# 허용 크기 중 400KB 이하로 다운스케일되는 500px 사용(→ 500x774, ~197KB).
+fetch 12-sudden-shower.jpg   500 "Hiroshige_-_Evening_Shower_at_Atake_and_the_Great_Bridge.jpg"
 
 echo "완료: $(ls assets/targets/*.jpg | wc -l)/7"
