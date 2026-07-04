@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="description" content="Masterpieces Reborn — 세계 걸작 명화 12점을 인터랙티브 제너러티브 아트로 다시 그린 미디어 아트 전시." />
+  <title>Masterpieces Reborn · 다시 살아나는 걸작들</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body data-view="atrium">
+  <div class="grain" aria-hidden="true"></div>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <button class="brand" data-action="home" aria-label="아트리움으로">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <span class="brand__text">MASTERPIECES&nbsp;REBORN</span>
+    </button>
+    <nav class="topnav" aria-label="전시관"><!-- wing links injected by JS --></nav>
+    <button class="sound-toggle" data-action="sound" aria-pressed="false" aria-label="사운드 토글">
+      <span class="sound-toggle__icon" aria-hidden="true"></span>
+    </button>
+  </header>
+
+  <main class="atrium" id="atrium">
+    <section class="hero">
+      <p class="hero__eyebrow">인터랙티브 제너러티브 미디어 아트 전시</p>
+      <h1 class="hero__title">Masterpieces<br />Reborn</h1>
+      <p class="hero__lead">
+        호쿠사이의 파도에서 칸딘스키의 도형까지 — 세계 걸작 명화 열두 점이
+        코드로 다시 태어납니다. 수천 개의 입자가 원작의 형상으로 모여들고,
+        당신의 손끝에 흩어졌다가, 다시 그 불멸의 그림으로 되돌아옵니다.
+        세 개의 전시관을 거닐며 걸작을 직접 만지고, 휘젓고, 밝혀보세요.
+      </p>
+      <div class="hero__meta"><span>12 WORKS</span><i></i><span>3 WINGS</span><i></i><span>INTERACTIVE</span></div>
+      <button class="hero__enter" data-action="enter">전시 입장</button>
+    </section>
+    <div class="wings" id="wings"><!-- wing sections + work cards injected by JS --></div>
+    <footer class="colophon">
+      <p>모든 원작은 퍼블릭 도메인입니다 · 매 화면은 실시간으로 생성됩니다</p>
+      <p class="colophon__credit">Made with Claude (Fable 5)</p>
+    </footer>
+  </main>
+
+  <section class="viewer" id="viewer" aria-hidden="true">
+    <canvas id="stage"></canvas>
+    <div class="viewer__chrome">
+      <button class="viewer__close" data-action="close" aria-label="전시관으로 돌아가기">✕</button>
+      <button class="viewer__nav viewer__nav--prev" data-action="prev" aria-label="이전 작품">‹</button>
+      <button class="viewer__nav viewer__nav--next" data-action="next" aria-label="다음 작품">›</button>
+      <div class="viewer__info">
+        <p class="viewer__no"><span id="v-no"></span> · <span id="v-wing"></span></p>
+        <h2 class="viewer__title" id="v-title"></h2>
+        <p class="viewer__medium" id="v-medium"></p>
+        <p class="viewer__note" id="v-note"></p>
+        <p class="viewer__hint" id="v-hint"></p>
+      </div>
+      <button class="viewer__infotoggle" data-action="info" aria-expanded="true" aria-label="작품 설명 접기/펼치기">ⓘ</button>
+    </div>
+    <div class="viewer__error" id="v-error" hidden>
+      <p>작품을 불러오지 못했습니다.</p>
+      <button data-action="close">아트리움으로 돌아가기</button>
+    </div>
+  </section>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>
