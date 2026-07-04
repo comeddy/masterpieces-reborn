@@ -17,6 +17,14 @@ const LOOP = 20; // 초
 // 소실점(중앙 약간 위)과 철교 기준선을 화면 비율로 잡는다
 let vp = { x: 0, y: 0 };
 
+// 배경 방사 그라데이션을 오프스크린에 1회 베이크(매 프레임 재도장 방지) +
+// init/resize 직후 첫 프레임만 불투명 도장하기 위한 플래그
+let bg = null, bgFresh = true;
+// 매 프레임 배경을 이 알파로 덮어 이전 프레임이 서서히 사라진다(모션 퍼시스턴스=잔상).
+// 낮을수록 잔상이 길고, 높을수록 짧다. 안개·기차 잔상이 은은히 보이되
+// 가산 안개가 흰색으로 번지지 않는 지점으로 튜닝.
+const TRAIL_FADE = 0.20;
+
 // ---- 의사 노이즈 유동장: 사인 조합으로 curl 유사 흐름 ----
 function flow(x, y, t) {
   const nx = x * 0.0018, ny = y * 0.0018;
@@ -68,6 +76,8 @@ export default {
     stir = { x: 0, y: 0, vx: 0, vy: 0, life: 0 };
     puffs = [];
     layout();
+    bakeBackground();     // 배경 1회 베이크
+    bgFresh = true;       // 첫 프레임 불투명 도장 예약
     fog = makeFog(fogCount());
     rain = makeRain(rainCount());
   },
@@ -98,6 +108,8 @@ export default {
 
   resize(w, h) {
     W = w; H = h; layout();
+    bakeBackground();     // 새 크기로 배경 재베이크
+    bgFresh = true;       // resize 직후 첫 프레임 불투명 도장
     // 개수 재조정(가벼운 재생성)
     fog = makeFog(fogCount());
     rain = makeRain(rainCount());
@@ -105,6 +117,7 @@ export default {
 
   dispose() {
     ctx = null; fog = []; rain = []; puffs = [];
+    bg = null; bgFresh = true;   // 오프스크린 참조 해제
   },
 };
 
@@ -159,9 +172,8 @@ function render(dt) {
   ctx.save();
   ctx.translate(ox, oy);
 
-  drawBackground();
-  // 잔상 트레일: 반투명 배경 덮기로 회화적 붓질감
-  paintTrail();
+  // 잔상 트레일: 첫 프레임만 불투명 배경, 이후 반투명 덮기로 회화적 모션 퍼시스턴스
+  coverBackground();
 
   updateFog(dt);
   drawBridge();             // 안개 뒤 흐릿한 교각(먼저, 아래층)
@@ -173,21 +185,30 @@ function render(dt) {
   ctx.restore();
 }
 
-// 황토-금-회갈 방사 그라데이션
-function drawBackground() {
-  const g = ctx.createRadialGradient(vp.x, vp.y, 10, vp.x, vp.y, Math.max(W, H) * 0.9);
+// 황토-금-회갈 방사 그라데이션을 오프스크린 캔버스에 1회 베이크
+function bakeBackground() {
+  bg = document.createElement("canvas");
+  bg.width = Math.max(1, Math.round(W));
+  bg.height = Math.max(1, Math.round(H));
+  const bctx = bg.getContext("2d");
+  const g = bctx.createRadialGradient(vp.x, vp.y, 10, vp.x, vp.y, Math.max(W, H) * 0.9);
   g.addColorStop(0, "#f3d27a");
   g.addColorStop(0.35, "#c8a24e");
   g.addColorStop(0.7, "#8a6a3c");
   g.addColorStop(1, "#4a3a28");
-  ctx.fillStyle = g;
-  ctx.fillRect(-20, -20, W + 40, H + 40);
+  bctx.fillStyle = g;
+  bctx.fillRect(0, 0, bg.width, bg.height);
 }
 
-// 반투명 트레일 (붓질감) — 배경색 계열로 살짝 덮기
-function paintTrail() {
-  ctx.fillStyle = "rgba(120,95,55,0.08)";
-  ctx.fillRect(-20, -20, W + 40, H + 40);
+// 배경 덮기: 첫 프레임(또는 resize 직후)은 불투명하게 배경을 확립하고,
+// 이후 매 프레임 반투명으로 덮어 이전 프레임이 서서히 사라지게 한다(잔상).
+// 셰이크 이동(±5px)에도 가장자리가 드러나지 않도록 -20..W+40 영역을 덮는다.
+function coverBackground() {
+  if (!bg) return;
+  ctx.globalAlpha = bgFresh ? 1 : TRAIL_FADE;
+  ctx.drawImage(bg, -20, -20, W + 40, H + 40);
+  ctx.globalAlpha = 1;
+  bgFresh = false;
 }
 
 // 안개 입자를 유동장으로 이동
