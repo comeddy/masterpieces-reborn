@@ -1,0 +1,150 @@
+/* ============ Masterpieces Reborn — 전시 셸 스타일 ============ */
+:root {
+  --bg: #0a0b0f;
+  --bg-soft: #12141b;
+  --ink: #e8e4da;
+  --ink-dim: #9a958a;
+  --line: rgba(232, 228, 218, 0.14);
+  --accent: #5aa7d8; /* 기본(Ⅰ관) — JS가 관별로 덮어씀 */
+  --serif: "Cormorant Garamond", serif;
+  --sans: "Inter", sans-serif;
+  --mono: "Space Mono", monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 300;
+  overflow-x: hidden;
+}
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+
+/* ---- 분위기 오버레이 ---- */
+.grain, .vignette { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+.grain {
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.vignette { background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%); }
+
+/* ---- 톱바 ---- */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 22px;
+  background: linear-gradient(to bottom, rgba(10,11,15,0.92), rgba(10,11,15,0));
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand__mark { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 12px var(--accent); transition: background 0.4s, box-shadow 0.4s; }
+.brand__text { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; color: var(--ink); }
+.topnav { display: flex; gap: 4px; }
+.topnav__link {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em;
+  padding: 6px 10px; color: var(--ink-dim); border-radius: 3px;
+  transition: color 0.25s;
+}
+.topnav__link:hover, .topnav__link[aria-current="true"] { color: var(--ink); }
+.sound-toggle { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; position: relative; }
+.sound-toggle__icon { position: absolute; inset: 0; margin: auto; width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--ink-dim); transition: all 0.25s; }
+.sound-toggle[aria-pressed="true"] .sound-toggle__icon { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px var(--accent); }
+
+/* ---- 아트리움 ---- */
+.atrium { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+.hero { min-height: 92vh; display: flex; flex-direction: column; justify-content: center; padding-top: 80px; }
+.hero__eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 0.3em; color: var(--accent); margin-bottom: 22px; }
+.hero__title { font-family: var(--serif); font-weight: 500; font-size: clamp(52px, 9vw, 110px); line-height: 1.02; letter-spacing: 0.01em; }
+.hero__lead { max-width: 560px; margin-top: 28px; font-size: 15px; line-height: 1.85; color: var(--ink-dim); }
+.hero__meta { display: flex; align-items: center; gap: 14px; margin-top: 34px; font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; color: var(--ink-dim); }
+.hero__meta i { width: 28px; height: 1px; background: var(--line); }
+.hero__enter {
+  margin-top: 44px; align-self: flex-start;
+  font-family: var(--mono); font-size: 12px; letter-spacing: 0.24em;
+  padding: 15px 34px; border: 1px solid var(--line); border-radius: 2px;
+  transition: border-color 0.3s, background 0.3s;
+}
+.hero__enter:hover { border-color: var(--accent); background: rgba(90,167,216,0.08); }
+
+/* ---- 전시관 섹션 ---- */
+.wing { padding: 70px 0 20px; }
+.wing__head { display: flex; align-items: baseline; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 30px; }
+.wing__index { font-family: var(--serif); font-style: italic; font-size: 30px; color: var(--wing-accent, var(--accent)); }
+.wing__name { font-family: var(--serif); font-size: 26px; font-weight: 500; }
+.wing__sub { font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; color: var(--ink-dim); }
+.wing__works { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+
+/* ---- 작품 카드 ---- */
+.card {
+  text-align: left; border: 1px solid var(--line); border-radius: 4px;
+  padding: 20px; background: var(--bg-soft); position: relative; overflow: hidden;
+  transition: border-color 0.3s, transform 0.3s;
+}
+.card:hover { border-color: var(--wing-accent, var(--accent)); transform: translateY(-3px); }
+.card::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: var(--wing-accent, var(--accent)); opacity: 0; transition: opacity 0.3s;
+}
+.card:hover::before { opacity: 1; }
+.card__no { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; color: var(--wing-accent, var(--accent)); }
+.card__title { font-family: var(--serif); font-size: 20px; font-weight: 500; margin-top: 10px; line-height: 1.25; }
+.card__ko { font-size: 12px; color: var(--ink-dim); margin-top: 5px; }
+.card__medium { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.06em; color: var(--ink-dim); margin-top: 14px; line-height: 1.6; }
+
+/* ---- 콜로폰 ---- */
+.colophon { padding: 80px 0 46px; text-align: center; color: var(--ink-dim); font-size: 12px; line-height: 2; }
+.colophon__credit { font-family: var(--mono); font-size: 10px; letter-spacing: 0.18em; }
+
+/* ---- 뷰어 ---- */
+.viewer { position: fixed; inset: 0; z-index: 60; background: #000; display: none; }
+body[data-view="viewer"] .viewer { display: block; }
+body[data-view="viewer"] .atrium { display: none; }
+body[data-view="viewer"] .topbar { display: none; }
+#stage { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.viewer__chrome button { z-index: 5; }
+.viewer__close, .viewer__infotoggle {
+  position: absolute; top: 18px; width: 42px; height: 42px;
+  border: 1px solid rgba(255,255,255,0.22); border-radius: 50%;
+  color: #fff; font-size: 15px; background: rgba(0,0,0,0.35); backdrop-filter: blur(6px);
+  transition: border-color 0.25s;
+}
+.viewer__close { right: 18px; }
+.viewer__infotoggle { right: 70px; }
+.viewer__close:hover, .viewer__infotoggle:hover, .viewer__nav:hover { border-color: #fff; }
+.viewer__nav {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 46px; height: 46px; border: 1px solid rgba(255,255,255,0.22); border-radius: 50%;
+  color: #fff; font-size: 22px; background: rgba(0,0,0,0.35); backdrop-filter: blur(6px);
+}
+.viewer__nav--prev { left: 18px; }
+.viewer__nav--next { right: 18px; }
+.viewer__info {
+  position: absolute; left: 24px; bottom: 24px; max-width: 420px;
+  padding: 20px 22px; border: 1px solid rgba(255,255,255,0.14); border-radius: 6px;
+  background: rgba(5,6,10,0.62); backdrop-filter: blur(10px);
+  transition: opacity 0.3s, transform 0.3s;
+}
+.viewer__info.is-hidden { opacity: 0; transform: translateY(12px); pointer-events: none; }
+.viewer__no { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; color: var(--accent); }
+.viewer__title { font-family: var(--serif); font-size: 24px; font-weight: 500; margin-top: 8px; }
+.viewer__medium { font-family: var(--mono); font-size: 9.5px; color: var(--ink-dim); margin-top: 8px; letter-spacing: 0.05em; }
+.viewer__note { font-size: 12.5px; line-height: 1.8; color: var(--ink); opacity: 0.85; margin-top: 12px; }
+.viewer__hint { font-size: 11px; color: var(--accent); margin-top: 12px; }
+.viewer__error {
+  position: absolute; inset: 0; display: flex; flex-direction: column; gap: 18px;
+  align-items: center; justify-content: center; color: var(--ink-dim); font-size: 14px;
+}
+.viewer__error[hidden] { display: none; }
+.viewer__error button { border: 1px solid var(--line); padding: 10px 24px; border-radius: 3px; }
+
+/* ---- 반응형 ---- */
+@media (max-width: 640px) {
+  .topnav { display: none; }
+  .viewer__info { left: 12px; right: 12px; bottom: 12px; max-width: none; padding: 14px 16px; }
+  .viewer__note { display: none; }
+  .viewer__nav { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .card, .card::before, .hero__enter { transition: none; }
+}
