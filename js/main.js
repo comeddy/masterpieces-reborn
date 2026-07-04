@@ -112,6 +112,7 @@ async function openWork(idx) {
   const work = WORKS[idx];
   const wing = wingOf(work);
   body.dataset.view = "viewer";
+  $("#viewer").setAttribute("aria-hidden", "false");
   document.documentElement.style.setProperty("--accent", wing.accent);
   $("#v-no").textContent = `No. ${work.no}`;
   $("#v-wing").textContent = `${wing.index} · ${wing.sub}`;
@@ -154,6 +155,7 @@ async function closeWork() {
   piece = null;
   current = -1;
   body.dataset.view = "atrium";
+  $("#viewer").setAttribute("aria-hidden", "true");
 }
 
 function step(dir) {
