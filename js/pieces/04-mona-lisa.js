@@ -79,8 +79,9 @@ function tagParticles() {
     const u = (p.tx - minX) / spanX, v = (p.ty - minY) / spanY;
     p.bx = p.tx; p.by = p.ty;                 // 숨쉬기 기준 목표
     p.phase = Math.random() * TAU;            // 개별 위상
-    // 미소 영역(u≈0.35..0.65, v≈0.55..0.62)은 복원이 가장 느림
-    const smile = u > 0.35 && u < 0.65 && v > 0.55 && v < 0.62;
+    // 미소 영역(입 주변)은 복원이 가장 느림.
+    // 원작 04-mona-lisa.jpg 픽셀 측정값(입 중심 u≈0.45, v≈0.31).
+    const smile = u > 0.37 && u < 0.53 && v > 0.275 && v < 0.345;
     p.isSmile = smile;
     p.spring = smile ? SPRING * 0.4 : SPRING;
   }

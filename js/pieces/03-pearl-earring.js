@@ -10,8 +10,9 @@ let flicker = 0;          // 촛불 깜빡임 남은 시간(초)
 let flickerAge = 0;       // 깜빡임 경과 시간(초) — 방사형 웨이브 전파용
 let waveOrigin = { x: 0, y: 0 };
 
-// 진주의 이미지 내 정규화 좌표(대략) — contain-fit 박스 기준
-const PEARL_U = 0.42, PEARL_V = 0.72, PEARL_R = 0.038;
+// 진주의 이미지 내 정규화 좌표 — contain-fit 박스 기준.
+// 원작 03-pearl-earring.jpg 픽셀 측정값(귀걸이 하이라이트 중심).
+const PEARL_U = 0.61, PEARL_V = 0.55, PEARL_R = 0.032;
 
 const FLICKER_DUR = 0.6;  // 클릭 깜빡임 지속(초)
 
