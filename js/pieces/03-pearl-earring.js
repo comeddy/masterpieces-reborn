@@ -15,6 +15,10 @@ const PEARL_U = 0.42, PEARL_V = 0.72, PEARL_R = 0.038;
 
 const FLICKER_DUR = 0.6;  // 클릭 깜빡임 지속(초)
 
+// 진주 입자의 절대 강성(전역 spring 4.2의 절반). 절대값으로 할당해
+// tagPearls()가 여러 번 호출돼도(예: resize 반복) 누적 반감되지 않도록 한다.
+const PEARL_SPRING = 2.1;
+
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height;
@@ -77,7 +81,8 @@ export default {
 
 // --- 진주 입자 식별 -------------------------------------------------
 // 목표 좌표(tx,ty)가 진주 위치에 가장 가까운 입자들을 골라
-// spring을 절반으로 낮춰(가장 늦게 복원) glow 대상으로 표시.
+// spring을 절대값(PEARL_SPRING)으로 낮춰(가장 늦게 복원) glow 대상으로 표시.
+// 진주 멤버십은 u,v 기반이라 resize와 무관 — 반감이 아닌 절대 할당이라 멱등하다.
 function tagPearls() {
   pearls = [];
   const ps = field.particles;
@@ -102,7 +107,7 @@ function tagPearls() {
     const p = ps[i];
     const dx = p.tx - cx, dy = p.ty - cy;
     if (dx * dx + dy * dy <= rr2) {
-      p.spring = (p.spring || 4.2) * 0.5; // 절반 강성 → 가장 늦게 복원
+      p.spring = PEARL_SPRING; // 절대 강성 할당(멱등) → 가장 늦게 복원
       pearls.push(i);
     }
   }
