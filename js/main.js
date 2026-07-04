@@ -40,6 +40,7 @@ function renderAtrium() {
     for (const work of WORKS.filter((w) => w.wing === wing.id)) {
       const card = document.createElement("button");
       card.className = "card";
+      card.dataset.no = work.no; // 뷰어 내비게이션 후 포커스 복원 대상 조회용
       card.innerHTML = `
         <span class="card__no">No. ${work.no}</span>
         <h3 class="card__title">${work.title}</h3>
@@ -112,6 +113,8 @@ async function openWork(idx) {
   current = idx;
   const work = WORKS[idx];
   const wing = wingOf(work);
+  // ←/→·prev/next 이동 후 닫아도 현재(마지막) 작품 카드로 포커스가 복원되도록 갱신
+  lastCard = $(`.card[data-no="${work.no}"]`) || lastCard;
   body.dataset.view = "viewer";
   $("#viewer").setAttribute("aria-hidden", "false");
   document.documentElement.style.setProperty("--accent", wing.accent);
@@ -146,7 +149,13 @@ function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); // 탭 복귀 시 폭주 방지 캡
   lastT = now;
   snapshotPointer(dt);
-  piece.tick(dt, pointer);
+  try {
+    piece.tick(dt, pointer);
+  } catch (err) {
+    console.error("작품 tick 예외 — 아트리움으로 복귀", err);
+    closeWork(); // rAF 루프가 소리 없이 죽지 않도록 우아하게 복귀
+    return;
+  }
   rafId = requestAnimationFrame(frame);
 }
 

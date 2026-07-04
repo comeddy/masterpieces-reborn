@@ -10,6 +10,12 @@ STATE=".deploy-state.json"   # 배포 인프라 ID 저장 (gitignore)
 
 if [ ! -f "$STATE" ]; then
   echo "== 최초 배포: 인프라 생성 =="
+  # 멱등 가드: STATE가 없는데 버킷이 이미 있으면 자동 복구 대신 명시적 안내 (안전 우선)
+  if aws s3api head-bucket --bucket "$BUCKET" 2>/dev/null; then
+    echo "오류: 버킷 ${BUCKET}이 이미 존재하지만 ${STATE}가 없습니다."
+    echo "기존 배포의 .deploy-state.json을 복원하거나, CloudFront 콘솔에서 distId/domain을 확인해 수동 작성하세요."
+    exit 1
+  fi
   # 1) S3 버킷 (퍼블릭 차단 유지)
   if [ "$REGION" = "us-east-1" ]; then
     aws s3api create-bucket --bucket "$BUCKET" --region "$REGION"
@@ -70,9 +76,12 @@ DIST_ID=$(python3 -c "import json;print(json.load(open('$STATE'))['distId'])")
 DOMAIN=$(python3 -c "import json;print(json.load(open('$STATE'))['domain'])")
 
 echo "== 업로드 =="
+# allowlist: 배포 대상만 명시적으로 포함 — 내부 아티팩트(.superpowers/.playwright-mcp 등)가
+# 실수로 퍼블릭 CDN에 올라가는 것을 원천 차단. --delete는 include된 원격 객체만 정리 대상.
 aws s3 sync . "s3://${BUCKET}" \
-  --exclude ".git/*" --exclude "docs/*" --exclude "test/*" --exclude "tools/*" \
-  --exclude ".deploy-state.json" --exclude ".gitignore" --delete
+  --exclude "*" \
+  --include "index.html" --include "css/*" --include "js/*" --include "assets/*" \
+  --delete
 
 echo "== 캐시 무효화 =="
 aws cloudfront create-invalidation --distribution-id "$DIST_ID" --paths "/*" > /dev/null
