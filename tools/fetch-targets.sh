@@ -27,5 +27,8 @@ fetch 06-night-watch.jpg     1024 "The_Night_Watch_-_HD.jpg"
 fetch 09-creation-of-adam.jpg 1024 "Michelangelo_-_Creation_of_Adam_(cropped).jpg"
 # 인왕제색도 contain-fit 배경 (1024 요청 → 1280px 허용 버킷 채택, 수묵 먹빛 대비 보존)
 fetch 13-inwang-after-rain.jpg 1024 "Inwangjesaekdo.jpg"
+# 씨름 contain-fit 배경 (원작 1747×2079 세로형 · 800 요청 → 960px 허용 버킷 채택:
+# 1024/1280 버킷은 ~717KB로 600KB 상한 초과, 960px/445KB가 목표폭·용량 균형)
+fetch 14-ssireum.jpg 800 "Danwon-Ssireum.jpg"
 
-echo "완료: $(ls assets/targets/*.jpg | wc -l)/7"
+echo "완료: $(ls assets/targets/*.jpg | wc -l)/8"
