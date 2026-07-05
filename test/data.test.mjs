@@ -3,19 +3,19 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WINGS, WORKS, wingOf } from "../js/data.js";
 
-test("전시관은 3개이고 필수 필드를 가진다", () => {
-  assert.equal(WINGS.length, 3);
+test("전시관은 4개이고 필수 필드를 가진다", () => {
+  assert.equal(WINGS.length, 4);
   for (const w of WINGS) {
     for (const k of ["id", "index", "name", "sub", "accent"]) assert.ok(w[k], `${w.id}.${k}`);
     assert.match(w.accent, /^#[0-9a-f]{6}$/i);
   }
-  assert.equal(new Set(WINGS.map(w => w.id)).size, 3);
+  assert.equal(new Set(WINGS.map(w => w.id)).size, 4);
 });
 
-test("작품은 12점이고 번호 01..12가 정확하다", () => {
-  assert.equal(WORKS.length, 12);
+test("작품은 16점이고 번호 01..16이 정확하다", () => {
+  assert.equal(WORKS.length, 16);
   const nos = WORKS.map(w => w.no);
-  assert.deepEqual(nos, Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0")));
+  assert.deepEqual(nos, Array.from({ length: 16 }, (_, i) => String(i + 1).padStart(2, "0")));
 });
 
 test("모든 작품이 필수 필드와 유효한 관/모듈 경로를 가진다", () => {
