@@ -82,11 +82,11 @@ function buildShapes() {
     [1.45, 0.30], [1.82, 0.60], [1.88, 1.75], [-1.88, 1.75],
   ];
   EAR = [[0.94, -0.06], [1.48, -0.16], [1.62, 0.18], [1.14, 0.22]];
-  // 뿔: 정수리에서 좌우로 벌어지는 리라형 초승달(밑동 굵고 끝 가늘게)
-  HORN_L = limbPoly([[0.10, -0.82], [0.0, -1.14], [-0.15, -1.42], [-0.36, -1.60]],
-                    [0.19, 0.14, 0.09, 0.045]);
-  HORN_R = limbPoly([[0.52, -0.80], [0.76, -1.10], [1.08, -1.30], [1.40, -1.40]],
-                    [0.20, 0.14, 0.09, 0.045]);
+  // 뿔: 정수리 위에 낮게 자리한 작고 짧은 뿔. 밑동에서 솟아 앞쪽(주둥이 방향)으로 굽어 끝이 아래로 말린다.
+  HORN_L = limbPoly([[0.08, -0.76], [-0.06, -0.96], [-0.24, -1.04], [-0.40, -0.96]],
+                    [0.13, 0.095, 0.055, 0.025]);
+  HORN_R = limbPoly([[0.50, -0.76], [0.68, -0.94], [0.86, -1.00], [0.98, -0.92]],
+                    [0.13, 0.095, 0.055, 0.025]);
   // 콧등 주홍: 주둥이 앞을 크게 덮는 둥근 코(브러시처럼 유기적)
   NOSE = [[-1.50, -0.08], [-1.44, -0.30], [-1.28, -0.42], [-1.05, -0.36], [-0.88, -0.14],
           [-0.85, 0.08], [-0.95, 0.26], [-1.18, 0.32], [-1.40, 0.22], [-1.51, 0.04]];
@@ -246,6 +246,15 @@ function drawBull() {
   ctx.lineWidth = Math.max(2, s * 0.045);
   const accents = [[[-0.9, -0.5], [-0.4, -0.2], [0.2, -0.3]], [[-1.1, 0.0], [-0.6, 0.1], [-0.1, 0.05]], [[0.5, -0.4], [0.7, 0.0], [0.6, 0.34]]];
   for (const a of accents) { const p = a.map(q => tf(q[0], q[1])); ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]); ctx.quadraticCurveTo(p[1][0], p[1][1], p[2][0], p[2][1]); ctx.stroke(); }
+  // 골격 강조: 콧등 능선 + 이마 정중선(굵은 먹빛 한 획)
+  ctx.strokeStyle = INK; ctx.globalAlpha = 0.72; ctx.lineWidth = Math.max(2.4, s * 0.052);
+  const bridge = [[0.30, -0.50], [-0.22, -0.34], [-0.66, -0.24], [-0.90, -0.12]].map(q => tf(q[0], q[1]));
+  ctx.beginPath(); ctx.moveTo(bridge[0][0], bridge[0][1]);
+  ctx.quadraticCurveTo(bridge[1][0], bridge[1][1], bridge[2][0], bridge[2][1]);
+  ctx.quadraticCurveTo((bridge[2][0] + bridge[3][0]) / 2, (bridge[2][1] + bridge[3][1]) / 2, bridge[3][0], bridge[3][1]);
+  ctx.stroke();
+  const brow = [[0.30, -0.70], [0.24, -0.52], [0.22, -0.36]].map(q => tf(q[0], q[1]));
+  ctx.beginPath(); ctx.moveTo(brow[0][0], brow[0][1]); ctx.quadraticCurveTo(brow[1][0], brow[1][1], brow[2][0], brow[2][1]); ctx.stroke();
   ctx.globalAlpha = 1; ctx.restore();
   // 콧등 주홍
   const noseW = mapPts(NOSE);
@@ -263,16 +272,37 @@ function drawBull() {
   // 7) 뿔(정수리 위, 또렷이)
   cutPiece(mapPts(HORN_R), "hornR", 5.6, CREAM, OCHRE_D, CREAM_H);
   cutPiece(mapPts(HORN_L), "hornL", 4.4, CREAM, OCHRE_D, CREAM_H);
-  // 8) 눈(크고 검은 눈 + 흰 반점) + 콧구멍
-  const eye = tf(0.14, -0.32);
-  ctx.save(); ctx.translate(eye[0], eye[1]); ctx.rotate(headRot - 0.16);
-  ctx.fillStyle = "#f7ead0"; ctx.beginPath(); ctx.ellipse(0, 0, s * 0.27, s * 0.185, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = INK; ctx.beginPath(); ctx.ellipse(-s * 0.05, s * 0.0, s * 0.16, s * 0.16, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(-s * 0.10, -s * 0.06, s * 0.045, 0, Math.PI * 2); ctx.fill();
-  ctx.lineWidth = Math.max(2.6, s * 0.055); ctx.strokeStyle = INK; ctx.lineCap = "round";
-  ctx.beginPath(); ctx.ellipse(0, 0, s * 0.3, s * 0.205, 0, Math.PI * 0.96, Math.PI * 2.02); ctx.stroke();  // 두터운 윗눈꺼풀
+  // 8) 눈(깊게 파묻힌 비장한 눈 — 움푹한 눈두덩·올라간 눈꼬리·작고 어두운 동공) + 콧구멍
+  const eye = tf(0.16, -0.30);
+  ctx.save(); ctx.translate(eye[0], eye[1]); ctx.rotate(headRot + 0.13);
+  // 움푹 파인 눈두덩(어두운 소켓, 부드럽게 스며듦)
+  const sock = ctx.createRadialGradient(0, -s * 0.02, s * 0.05, 0, -s * 0.02, s * 0.42);
+  sock.addColorStop(0, "rgba(34,16,7,0.78)"); sock.addColorStop(0.58, "rgba(48,24,11,0.42)"); sock.addColorStop(1, "rgba(48,24,11,0)");
+  ctx.fillStyle = sock; ctx.beginPath(); ctx.ellipse(0, -s * 0.02, s * 0.44, s * 0.33, 0, 0, Math.PI * 2); ctx.fill();
+  // 눈꺼풀 사이 아몬드형 안구(눈꼬리=바깥쪽 +x 이 올라감)
+  const hw = s * 0.215, hh = s * 0.11;
+  ctx.beginPath();
+  ctx.moveTo(-hw, s * 0.02);
+  ctx.quadraticCurveTo(-s * 0.02, -hh * 1.45, hw, -s * 0.06);
+  ctx.quadraticCurveTo(0, hh * 1.05, -hw, s * 0.02);
+  ctx.closePath();
+  ctx.fillStyle = "#a9752f"; ctx.fill();                    // 어두운 호박빛 안구
+  ctx.save(); ctx.clip();                                    // 윗눈꺼풀 그림자로 위쪽을 더 어둡게
+  ctx.fillStyle = "rgba(26,12,5,0.6)"; ctx.beginPath(); ctx.ellipse(0, -hh * 1.15, hw * 1.4, hh * 1.35, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#150b05"; ctx.beginPath(); ctx.ellipse(s * 0.035, -hh * 0.32, s * 0.058, s * 0.072, 0, 0, Math.PI * 2); ctx.fill();  // 작고 어두운 동공, 위를 노려봄
+  ctx.fillStyle = "rgba(255,238,196,0.75)"; ctx.beginPath(); ctx.arc(s * 0.058, -hh * 0.55, s * 0.014, 0, Math.PI * 2); ctx.fill();     // 날카로운 점 하이라이트
+  ctx.restore();
+  // 두텁게 드리운 윗눈꺼풀(먹빛 한 획, 바깥쪽으로 올라감)
+  ctx.strokeStyle = INK; ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.lineWidth = Math.max(3, s * 0.072);
+  ctx.beginPath(); ctx.moveTo(-hw - s * 0.05, s * 0.03); ctx.quadraticCurveTo(-s * 0.02, -hh * 1.85, hw + s * 0.07, -s * 0.09); ctx.stroke();
+  // 아랫눈꺼풀(가늘게)
   ctx.lineWidth = Math.max(1.8, s * 0.03);
-  ctx.beginPath(); ctx.ellipse(0, s * 0.02, s * 0.29, s * 0.2, 0, Math.PI * 0.1, Math.PI * 0.9); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(-hw - s * 0.02, s * 0.03); ctx.quadraticCurveTo(0, hh * 1.25, hw + s * 0.02, -s * 0.06); ctx.stroke();
+  // 파묻힌 눈두덩 위 골이 진 눈썹뼈 획
+  ctx.strokeStyle = INK2; ctx.globalAlpha = 0.7; ctx.lineWidth = Math.max(2, s * 0.032);
+  ctx.beginPath(); ctx.moveTo(-hw * 0.55, -hh * 2.0); ctx.quadraticCurveTo(0, -hh * 2.55, hw * 1.05, -hh * 1.7); ctx.stroke();
+  ctx.globalAlpha = 1;
   ctx.restore();
   const nostril = tf(-1.16, 0.0);
   ctx.save(); ctx.translate(nostril[0], nostril[1]); ctx.rotate(headRot);
