@@ -89,11 +89,11 @@ export const WORKS = [
     module: "./pieces/11-composition-viii.js",
   },
   {
-    no: "12", wing: "dream", title: "After Hiroshige — Sudden Shower", ko: "신오하시 다리의 소나기",
-    medium: "Ukiyo-e rainfall · after Hiroshige (1857, public domain)", year: "2026",
-    note: "히로시게의 소나기 — 판화에 새겨진 곧은 빗줄기가 실제로 쏟아진다. 커서를 옮기면 종이 우산이 따라와 비를 가려주고, 우산 가장자리에서 빗방울이 튄다. 반 고흐가 유화로 베껴 그렸던 바로 그 비를, 이제는 손끝으로 긋는다.",
-    hint: "커서가 우산이 됩니다 · 클릭으로 폭우 토글",
-    module: "./pieces/12-sudden-shower.js", asset: "assets/targets/12-sudden-shower.jpg",
+    no: "12", wing: "dream", title: "After Lee Jung-seob — Bull", ko: "황소",
+    medium: "Paper puppet theatre · after Lee Jung-seob (c.1953)", year: "2026",
+    note: "이중섭의 황소가 가위로 오려낸 종이 인형이 되어 작은 무대에 오른다. 굵은 윤곽과 황토빛 붓질의 조각들이 막대 끝에서 움직이며 느릿하게 걷고, 고개를 흔들고, 이따금 온몸으로 울부짖는다. 막대를 잡아 직접 조종해보라 — 소는 당신의 손끝에서도 이중섭의 소로 남는다.",
+    hint: "드래그로 막대를 잡아 조종하세요 · 클릭으로 돌진 · 가만두면 소극이 계속됩니다",
+    module: "./pieces/12-bull-puppet.js",
   },
 ];
 
