@@ -78,14 +78,52 @@ function computeFit() {
   fit = { x: (W - w) / 2, y: (H - h) / 2, w, h };
 }
 
-// 배경 베이크: 한지 여백 → 원작(또는 절차적 씨름판)
+// 배경 베이크: 한지 여백 → 원작(또는 절차적 씨름판) → 인물 영역 소프트 패치
 function buildBase() {
   actx.setTransform(1, 0, 0, 1, 0, 0);
   actx.clearRect(0, 0, W, H);
   actx.fillStyle = PAPER;
   actx.fillRect(0, 0, W, H);
-  if (img) actx.drawImage(img, fit.x, fit.y, fit.w, fit.h);
+  if (img) { actx.drawImage(img, fit.x, fit.y, fit.w, fit.h); softPatchFigures(); }
   else proceduralScene();
+}
+
+// 인물 영역 소프트 패치(원작 위에만): 각 타원 영역의 크롭을 강하게 블러/확대한
+// 색-평균 패치로 덮어 원작 인물의 또렷한 윤곽을 감춘다. 타일이 제자리에 있으면
+// 이 패치는 완전히 가려지고, 큰 동작(들배지기·환호)으로 타일이 비운 자리에서는
+// 또렷한 이중상 대신 은은한 색 번짐만 노출된다. (베이크 시 1회만 — 프레임 비용 0)
+function softPatchFigures() {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  const padX = 1.10, padY = 1.24;                 // 들썩·들배지기로 드러나는 여유 밴드까지 덮도록 확장
+  for (const r of REGIONS) {
+    const cx = fit.x + r.u * fit.w, cy = fit.y + r.v * fit.h;
+    const hw = r.hu * fit.w * padX, hh = r.hv * fit.h * padY;
+    const dw = Math.max(2, Math.round(hw * 2)), dh = Math.max(2, Math.round(hh * 2));
+    const sw = 2 * r.hu * iw * padX, sh = 2 * r.hv * ih * padY;   // 원작에서의 패치 소스 크기
+    // 1-pass: 1/8로 축소해 색을 평균화
+    const sm = makeCanvas(Math.max(1, Math.round(dw / 8)), Math.max(1, Math.round(dh / 8)));
+    const smx = sm.getContext("2d");
+    smx.drawImage(img, r.u * iw - sw / 2, r.v * ih - sh / 2, sw, sh, 0, 0, sm.width, sm.height);
+    // 2-pass: 다시 확대(부드러운 색 번짐) — 여력이 되면 가우시안 블러까지(폴백 필수)
+    const patch = makeCanvas(dw, dh);
+    const pc = patch.getContext("2d");
+    pc.imageSmoothingEnabled = true;
+    try { pc.filter = "blur(" + Math.max(2, Math.round(Math.min(dw, dh) * 0.05)) + "px)"; } catch (e) {}
+    pc.drawImage(sm, 0, 0, sm.width, sm.height, 0, 0, dw, dh);
+    try { pc.filter = "none"; } catch (e) {}
+    // 부드러운 타원 마스크(중심 불투명 → 가장자리 페이드): 가장자리는 진짜 원작을 남겨
+    // 유휴 시 티가 나지 않게 한다.
+    pc.globalCompositeOperation = "destination-in";
+    pc.translate(dw / 2, dh / 2); pc.scale(dw / 2, dh / 2);
+    const g = pc.createRadialGradient(0, 0, 0, 0, 0, 1);
+    g.addColorStop(0, "rgba(0,0,0,1)");
+    g.addColorStop(0.74, "rgba(0,0,0,1)");
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    pc.fillStyle = g;
+    pc.beginPath(); pc.arc(0, 0, 1, 0, 6.283); pc.fill();
+    actx.setTransform(1, 0, 0, 1, 0, 0);
+    actx.drawImage(patch, Math.round(cx - hw), Math.round(cy - hh));
+  }
 }
 
 // 절차적 폴백 — 모래판(연한 타원 링) + 흩어둔 갓·신발. 인물은 타일로 그려진다.
