@@ -83,11 +83,11 @@ export const WORKS = [
     module: "./pieces/10-tower-of-babel.js",
   },
   {
-    no: "11", wing: "dream", title: "After Kandinsky — Composition VIII", ko: "구성 8",
-    medium: "Geometric orchestra · WebAudio · after Kandinsky (1923, public domain)", year: "2026",
-    note: "칸딘스키는 색과 형태에서 소리를 들었다. 크림색 캔버스 위 원과 삼각형과 선들이 느리게 부유하다가, 손끝이 닿으면 저마다의 음색으로 울린다 — 원은 부드럽게, 삼각형은 날카롭게. 그림이 악보가 되는 공감각의 방.",
-    hint: "도형을 클릭해 연주하세요 · 우상단 사운드를 켜면 소리가 납니다",
-    module: "./pieces/11-composition-viii.js",
+    no: "11", wing: "dream", title: "After Klimt — The Tree of Life", ko: "생명의 나무",
+    medium: "Golden spiral growth · WebAudio · after Klimt (1905–09, public domain)", year: "2026",
+    note: "클림트의 생명의 나무가 금빛 나선을 뻗으며 자라난다. 가지는 하늘을 향해 감아 올라가 저마다의 소용돌이로 말리고, 클릭한 자리에서는 새 가지가 돋아 피어난다. 가지 사이에 클림트의 검은 새가 내려앉는 — 삶과 죽음과 재생이 한 그루에 감긴 나무.",
+    hint: "클릭한 곳에서 새 가지가 자랍니다 · 드래그로 바람 · 사운드를 켜면 가지가 필 때 울림",
+    module: "./pieces/11-tree-of-life.js",
   },
   {
     no: "12", wing: "dream", title: "Hommage à Picasso — Simultaneous Faces", ko: "동시의 얼굴",
