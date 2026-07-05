@@ -90,11 +90,11 @@ export const WORKS = [
     module: "./pieces/11-composition-viii.js",
   },
   {
-    no: "12", wing: "dream", title: "After Lee Jung-seob — Bull", ko: "황소",
-    medium: "Paper puppet theatre · after Lee Jung-seob (c.1953)", year: "2026",
-    note: "이중섭의 황소가 가위로 오려낸 종이 인형이 되어 작은 무대에 오른다. 굵은 윤곽과 황톳빛 붓질의 조각들이 막대 끝에서 숨을 고르고, 고개를 흔들고, 이따금 온몸으로 울부짖는다. 막대를 잡으면 소는 당신의 손끝에서도 이중섭의 소로 남는다.",
-    hint: "드래그로 막대를 잡아 조종하세요 · 클릭으로 돌진 · 가만히 두면 소극이 계속됩니다",
-    module: "./pieces/12-bull-puppet.js",
+    no: "12", wing: "dream", title: "Hommage à Picasso — Simultaneous Faces", ko: "동시의 얼굴",
+    medium: "Generative cubism · hommage à Picasso (style homage, no specific work)", year: "2026",
+    note: "피카소는 하나의 얼굴을 여러 시점에서 동시에 보았다. 조각난 면들이 정면과 옆모습을 한 화면에 겹쳐 놓고, 클릭할 때마다 얼굴은 전혀 새로운 구성으로 다시 조립된다 — 매 순간이 단 한 번뿐인 초상. 특정 원작의 복제가 아닌, 큐비즘이라는 발명 자체에 바치는 오마주.",
+    hint: "클릭하면 얼굴이 새로 조립됩니다 · 드래그로 면을 밀어 시점을 비트세요",
+    module: "./pieces/12-cubist-faces.js",
   },
 
   // ---- Ⅳ관 · 한국의 방 — 조선 회화, 신규 기법 ----
