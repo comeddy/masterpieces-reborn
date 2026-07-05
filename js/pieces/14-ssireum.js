@@ -2,8 +2,12 @@
 // After Kim Hong-do — Ssireum, 씨름 (단원풍속도첩, c.1780, 국립중앙박물관 · 공개)
 // 원작을 한지 톤 여백 위에 contain-fit으로 깔고, 원작에서 크롭한 인물 조각들을
 // 개별 위상으로 미세하게 들썩·기울여 "살아있는 군중"을 만든다.
-//  · 클릭 = 씨름꾼 쌍이 들배지기로 들렸다 내려오고(0.8초), 클릭 지점에서
-//    방사형 환호 파동이 퍼져 도달한 구경꾼의 들썩임이 일시 증폭된다.
+// 중앙 씨름꾼 쌍은 종이 인형극처럼 처리한다:
+//  · 원작 실루엣을 근사한 다각형으로 "오려낸" 종이 인형(가위 단면 흰 테두리 + 나무 막대 2개).
+//  · 배경에서 살짝 떠 있도록 부드러운 드롭 섀도 — 들리거나 흔들리면 그림자도 함께 변한다.
+//  · 유휴에도 두 막대 위에서 서로 밀고 당기듯 조금씩 계속 흔들린다(힘겨루기 리듬).
+//  · 클릭 = 들배지기 2단 모션(웅크림→들어올림→안착 바운스), 그림자가 커지고 흐려진다.
+//    동시에 클릭 지점에서 방사형 환호 파동이 퍼져 도달한 구경꾼의 들썩임이 일시 증폭.
 //  · 드래그 = 파도응원: 커서가 지나간 구경꾼들이 순차로 크게 들썩인다.
 //  · 엿장수만은 어떤 파동에도 반응하지 않는다(무심함 — 제 리듬만).
 //
@@ -20,12 +24,27 @@ const IMG_W = 960, IMG_H = 1142;      // 채택 원작 픽셀 치수(폴백 종�
 const PAPER = "#e7dcc0";              // 한지 여백 톤
 const INK = "rgba(38,32,26,";         // 폴백 먹선 색(알파 접미)
 
-// ---- 인물 영역 (정규화 u,v = 원작 픽셀/치수) — 원작 비교로 좌표 확정 ----
-// kind: "wrestler" 씨름꾼 쌍 / "vendor" 엿장수(파동 무시) / "crowd" 구경꾼
+// ---- 씨름꾼 종이 인형(중앙) — 원작 실루엣을 근사한 다각형 오리기 ----
+// 두 씨름꾼은 서로 맞잡고 한쪽이 다른 쪽을 들어올리는(들배지기) 자세라
+// 팔·다리가 얽혀 있다 → 사각 크롭이 아닌 "한 덩어리 오리기"로 실루엣을 딴다.
+// (두 장 겹침은 얽힌 그립을 갈라 이중상이 생기므로 배제.) 좌표는 원작 정규화 u,v.
+const PUPPET_POLY = [
+  [0.4240,0.3974],[0.4310,0.3646],[0.4590,0.3482],[0.5010,0.3687],[0.5255,0.3441],
+  [0.5640,0.3441],[0.5955,0.3564],[0.6235,0.3851],[0.6305,0.4343],[0.6760,0.4630],
+  [0.6865,0.4958],[0.6690,0.5368],[0.6620,0.5778],[0.6550,0.6393],[0.6760,0.6762],
+  [0.6340,0.7008],[0.5920,0.7049],[0.5500,0.6967],[0.5080,0.7008],[0.4660,0.6926],
+  [0.4275,0.6885],[0.4380,0.6270],[0.4345,0.5368],[0.4170,0.4794],[0.4170,0.4343],
+  [0.4205,0.4097],
+];
+// 인형이 매달린 지면 기준점(막대 밑동·회전 피벗) — 발밑 중앙 살짝 아래
+const PUPPET_PIVOT = [0.545, 0.712];
+// 막대 두 개가 붙는 발밑 지점(정규화)
+const STICK_ANCHORS = [[0.478, 0.688], [0.612, 0.700]];
+
+// ---- 구경꾼·엿장수 영역 (정규화 u,v = 원작 픽셀/치수) ----
+// kind: "vendor" 엿장수(파동 무시) / "crowd" 구경꾼
 // hu,hv: 반폭·반높이(정규화). 크롭·들썩임 타원의 반경.
 const REGIONS = [
-  // 중앙 — 씨름꾼 쌍(들배지기 직전)
-  { u: 0.558, v: 0.505, hu: 0.150, hv: 0.178, kind: "wrestler" },
   // 엿장수 — 좌중앙, 엿판을 메고 바깥을 향함
   { u: 0.190, v: 0.545, hu: 0.090, hv: 0.150, kind: "vendor" },
   // 상단 좌측 무리
@@ -54,11 +73,13 @@ const REGIONS = [
   { u: 0.762, v: 0.872, hu: 0.078, hv: 0.090, kind: "crowd" },
 ];
 
-let figs = [];                        // 인물 상태 배열(타일·화면좌표·위상·흥분도)
+let figs = [];                        // 구경꾼 상태 배열(타일·화면좌표·위상·흥분도)
+let puppet = null;                    // 씨름꾼 종이 인형(타일·그림자·화면기하·위상)
 let waves = [];                       // 방사형 환호 파동 {x,y,el,speed,maxR,strength}
 let pressMoved = false;               // 이번 누름이 드래그로 바뀌었는지
 let tech = -1;                        // 씨름꾼 기술 진행 시간(초). <0 = 비활성
-const TECH_DUR = 0.8;                 // 들배지기 지속(초)
+const TECH_DUR = 1.2;                 // 들배지기 지속(초) — 웅크림→들기→안착
+const PUP_PAD = 26;                   // 인형 타일 여백(가위 단면·그림자 여유, 소스 px)
 
 function makeCanvas(w, h) {
   const c = document.createElement("canvas");
@@ -66,6 +87,16 @@ function makeCanvas(w, h) {
   c.height = Math.max(1, h | 0);
   return c;
 }
+
+// ---- 다각형 유틸 ----
+function polyBBox(p) {
+  let a = 1e9, b = 1e9, c = -1e9, d = -1e9;
+  for (const q of p) { if (q[0] < a) a = q[0]; if (q[1] < b) b = q[1]; if (q[0] > c) c = q[0]; if (q[1] > d) d = q[1]; }
+  return { u0: a, v0: b, u1: c, v1: d };
+}
+function polyCentroid(p) { let x = 0, y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; }
+// 결정적 지터(가위 단면의 미세하게 삐뚤한 절단선용) — 인덱스 기반 해시
+function jitter(i) { const t = Math.sin(i * 127.1 + 11.7) * 43758.5453; return (t - Math.floor(t)) - 0.5; }
 
 // 원작 종횡비를 화면에 contain-fit
 function computeFit() {
@@ -84,8 +115,40 @@ function buildBase() {
   actx.clearRect(0, 0, W, H);
   actx.fillStyle = PAPER;
   actx.fillRect(0, 0, W, H);
-  if (img) { actx.drawImage(img, fit.x, fit.y, fit.w, fit.h); softPatchFigures(); }
+  if (img) { actx.drawImage(img, fit.x, fit.y, fit.w, fit.h); softPatchFigures(); softPatchPuppet(); }
   else proceduralScene();
+}
+
+// 씨름꾼 인형이 차지한 자리의 원작 씨름꾼을 지운다(들배지기·흔들림으로 인형이 자리를
+// 비워도 배경에 또렷한 원작 씨름꾼이 비치지 않도록). 실루엣 다각형을 살짝 부풀린
+// 영역만 강하게 블러한 한지-평균색 패치로 덮는다. (베이크 1회 — 프레임 비용 0)
+function softPatchPuppet() {
+  const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+  // 원작 씨름꾼의 발자국 전체(오려낸 실루엣 밖으로 뻗은 다리·발까지)를 덮는 넉넉한 영역.
+  // 씨름꾼은 열린 모래판 한가운데라 주변은 빈 한지 — 넓게 덮어도 다른 인물을 침범하지 않는다.
+  const u0 = 0.395, v0 = 0.320, u1 = 0.778, v1 = 0.800;
+  const sx = u0 * iw, sy = v0 * ih, sw = (u1 - u0) * iw, sh = (v1 - v0) * ih;
+  const dw = Math.max(2, Math.round((u1 - u0) * fit.w));
+  const dh = Math.max(2, Math.round((v1 - v0) * fit.h));
+  // 1/12 축소 → 확대 + 강한 블러로 색만 남긴다
+  const sm = makeCanvas(Math.max(1, Math.round(dw / 12)), Math.max(1, Math.round(dh / 12)));
+  sm.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, sm.width, sm.height);
+  const patch = makeCanvas(dw, dh);
+  const pc = patch.getContext("2d");
+  pc.imageSmoothingEnabled = true;
+  try { pc.filter = "blur(" + Math.max(5, Math.round(Math.min(dw, dh) * 0.11)) + "px)"; } catch (e) {}
+  pc.drawImage(sm, 0, 0, sm.width, sm.height, 0, 0, dw, dh);
+  try { pc.filter = "none"; } catch (e) {}
+  // 타원 페이드 마스크(중심 불투명 → 가장자리 한지로 스밈) — 하드 엣지 없이 스며든다
+  pc.globalCompositeOperation = "destination-in";
+  pc.translate(dw / 2, dh / 2); pc.scale(dw / 2, dh / 2);
+  const g = pc.createRadialGradient(0, 0, 0, 0, 0, 1);
+  g.addColorStop(0, "rgba(0,0,0,1)");
+  g.addColorStop(0.86, "rgba(0,0,0,1)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  pc.fillStyle = g; pc.beginPath(); pc.arc(0, 0, 1, 0, 6.283); pc.fill();
+  actx.setTransform(1, 0, 0, 1, 0, 0);
+  actx.drawImage(patch, Math.round(fit.x + u0 * fit.w), Math.round(fit.y + v0 * fit.h), dw, dh);
 }
 
 // 인물 영역 소프트 패치(원작 위에만): 각 타원 영역의 크롭을 강하게 블러/확대한
@@ -246,6 +309,143 @@ function computeScreen() {
   }
 }
 
+// 절차적 씨름꾼(폴백 전용) — 실루엣 클립 안을 흰 도포 톤으로 채우고 두 상투를 얹는다.
+function drawProcWrestlers(c, x, y, w, h) {
+  c.fillStyle = "rgba(228,221,203,0.98)"; c.fillRect(x, y, w, h);
+  c.fillStyle = INK + "0.85)";
+  c.beginPath(); c.arc(x + w * 0.30, y + h * 0.15, w * 0.085, 0, 6.283); c.fill();
+  c.beginPath(); c.arc(x + w * 0.60, y + h * 0.13, w * 0.085, 0, 6.283); c.fill();
+  c.strokeStyle = INK + "0.55)"; c.lineWidth = Math.max(1.5, w * 0.018); c.lineJoin = "round";
+  c.beginPath(); c.moveTo(x + w * 0.46, y + h * 0.22);
+  c.quadraticCurveTo(x + w * 0.52, y + h * 0.55, x + w * 0.44, y + h * 0.94); c.stroke();
+}
+
+// 씨름꾼 종이 인형 베이크(1회): 원작 실루엣 오리기 + 가위 단면(흰 종이 테두리) + 그림자 타일.
+function buildPuppet() {
+  const iw = img ? (img.naturalWidth || img.width) : IMG_W;
+  const ih = img ? (img.naturalHeight || img.height) : IMG_H;
+  const bb = polyBBox(PUPPET_POLY), cen = polyCentroid(PUPPET_POLY);
+  const sw = (bb.u1 - bb.u0) * iw, sh = (bb.v1 - bb.v0) * ih;
+  const bw = Math.max(4, Math.round(sw)), bh = Math.max(4, Math.round(sh));  // 본체(소스 px)
+  const tw = bw + PUP_PAD * 2, th = bh + PUP_PAD * 2;
+  const toLocal = (p) => [PUP_PAD + (p[0] - bb.u0) / (bb.u1 - bb.u0) * bw,
+                          PUP_PAD + (p[1] - bb.v0) / (bb.v1 - bb.v0) * bh];
+  const inner = PUPPET_POLY.map(toLocal);
+  const lc = toLocal(cen);
+  const rim = Math.max(3, Math.round(Math.min(bw, bh) * 0.03));   // 가위 단면 폭
+  // 바깥 다각형(가위 단면) — 중심에서 바깥으로 밀고 미세 지터로 삐뚤하게
+  const outer = inner.map((q, i) => {
+    const dx = q[0] - lc[0], dy = q[1] - lc[1], d = Math.hypot(dx, dy) || 1;
+    return [q[0] + dx / d * rim * (1 + jitter(i) * 0.55) + jitter(i * 3.3) * rim * 0.4,
+            q[1] + dy / d * rim * (1 + jitter(i * 1.7) * 0.55) + jitter(i * 5.1) * rim * 0.4];
+  });
+  const trace = (c, pts) => { c.beginPath(); c.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < pts.length; k++) c.lineTo(pts[k][0], pts[k][1]); c.closePath(); };
+
+  const tile = makeCanvas(tw, th);
+  const c = tile.getContext("2d");
+  // 1) 흰 종이(가위 단면) + 절단선
+  c.fillStyle = "#f4ecd6"; trace(c, outer); c.fill();
+  c.lineJoin = "round"; c.strokeStyle = "rgba(120,104,74,0.5)"; c.lineWidth = Math.max(1, rim * 0.22); c.stroke();
+  // 2) 그림(원작 크롭/절차)을 안쪽 실루엣에 클립
+  c.save(); trace(c, inner); c.clip();
+  if (img) c.drawImage(img, bb.u0 * iw, bb.v0 * ih, sw, sh, PUP_PAD, PUP_PAD, bw, bh);
+  else drawProcWrestlers(c, PUP_PAD, PUP_PAD, bw, bh);
+  c.restore();
+  // 3) 안쪽 가장자리 접힘 그늘(입체감)
+  c.strokeStyle = "rgba(58,46,30,0.26)"; c.lineWidth = Math.max(1, rim * 0.2); trace(c, inner); c.stroke();
+
+  // 그림자 타일(바깥 실루엣을 검게 + 블러)
+  const shadow = makeCanvas(tw, th);
+  const sc = shadow.getContext("2d");
+  try { sc.filter = "blur(" + Math.max(3, Math.round(rim * 1.3)) + "px)"; } catch (e) {}
+  sc.fillStyle = "rgba(28,22,14,1)"; trace(sc, outer); sc.fill();
+  try { sc.filter = "none"; } catch (e) {}
+
+  puppet = { tile, shadow, bb, ph1: 0.4, ph2: 1.9,
+             ox: 0, oy: 0, dw: 0, dh: 0, pivotX: 0, pivotY: 0, s: 1 };
+  updatePuppetScreen();
+}
+
+// 인형 화면 기하 갱신(fit 변경 시)
+function updatePuppetScreen() {
+  if (!puppet) return;
+  const iw = img ? (img.naturalWidth || img.width) : IMG_W;
+  const s = fit.w / iw, bb = puppet.bb;
+  puppet.s = s;
+  puppet.dw = puppet.tile.width * s;
+  puppet.dh = puppet.tile.height * s;
+  puppet.ox = fit.x + bb.u0 * fit.w - PUP_PAD * s;
+  puppet.oy = fit.y + bb.v0 * fit.h - PUP_PAD * s;
+  puppet.pivotX = fit.x + PUPPET_PIVOT[0] * fit.w;
+  puppet.pivotY = fit.y + PUPPET_PIVOT[1] * fit.h;
+}
+
+// 들배지기 들림 곡선: t∈[0,1] → 웅크림(-0.18)→들어올림(1)→안착 바운스(0)
+function techLift(t) {
+  if (t < 0.15) { const k = t / 0.15; return -0.18 * Math.sin(k * Math.PI * 0.5); }
+  if (t < 0.58) { const k = (t - 0.15) / 0.43, e = 1 - Math.pow(1 - k, 3); return -0.18 * (1 - e) + e; }
+  const k = (t - 0.58) / 0.42;
+  return (1 - Math.pow(k, 1.4)) + Math.sin(k * Math.PI * 2.2) * 0.1 * (1 - k);
+}
+
+// 나무 막대 두 개 — 발밑 앵커에서 화면 아래로 뻗는다(인형 뒤에 붙어 함께 기운다).
+function drawSticks() {
+  const p = puppet, w0 = Math.max(2.5, Math.min(W, H) * 0.011);
+  const bottomY = (H - p.pivotY) + 160;
+  for (const a of STICK_ANCHORS) {
+    const ax = (fit.x + a[0] * fit.w) - p.pivotX;
+    const ay = (fit.y + a[1] * fit.h) - p.pivotY;
+    const g = ctx.createLinearGradient(ax - w0, 0, ax + w0, 0);
+    g.addColorStop(0, "#5c3d22"); g.addColorStop(0.45, "#8a6238"); g.addColorStop(1, "#4f341e");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(ax - w0 * 0.5, ay); ctx.lineTo(ax + w0 * 0.5, ay);
+    ctx.lineTo(ax + w0 * 0.42, bottomY); ctx.lineTo(ax - w0 * 0.42, bottomY);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "rgba(224,192,142,0.5)"; ctx.lineWidth = Math.max(1, w0 * 0.16);
+    ctx.beginPath(); ctx.moveTo(ax - w0 * 0.12, ay); ctx.lineTo(ax - w0 * 0.1, bottomY); ctx.stroke();
+  }
+}
+
+// 씨름꾼 종이 인형: 유휴 미세 흔들림(힘겨루기) + 들배지기 2단 모션 + 드롭 섀도.
+function drawPuppet() {
+  if (!puppet) return;
+  const p = puppet, half = reduced ? 0.45 : 1;
+  // 유휴: 두 리듬을 겹친 회전·상하(막대 위에서 서로 밀고 당기는 느낌)
+  let rock = (0.020 * Math.sin(T * 0.9 + p.ph1) + 0.012 * Math.sin(T * 1.7 + p.ph2)) * half;
+  let bob = (2.0 * Math.sin(T * 1.3 + p.ph2) + 1.1 * Math.sin(T * 2.3)) * half;
+  let up = 0;
+  if (tech >= 0) {
+    const tm = reduced ? 0.5 : 1;
+    up = techLift(Math.min(1, tech / TECH_DUR)) * tm;
+    rock += up * 0.15;                          // 들면서 기울임
+  }
+  const lift = up * p.dh * 0.34 - bob;          // 화면 px(위=음수 처리 아래에서)
+  const L = Math.max(0, up);                    // 그림자 확대·흐림 기준
+
+  // ---- 드롭 섀도(배경 위) — 유휴엔 살짝 떠 있고, 들릴수록 커지고 옅게 퍼진다 ----
+  const shScale = 1.03 + L * 0.14;              // 확대(업스케일 → 흐려짐)
+  const shAlpha = (reduced ? 0.16 : 0.26) * (1 - L * 0.32);
+  const shDX = rock * 80 + 9, shDY = 12 + L * 32;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, shAlpha);
+  ctx.translate(p.pivotX, p.pivotY);
+  ctx.rotate(rock * 0.6);
+  ctx.translate(shDX, shDY);
+  ctx.scale(shScale, shScale);
+  ctx.drawImage(p.shadow, p.ox - p.pivotX, p.oy - p.pivotY, p.dw, p.dh);
+  ctx.restore();
+
+  // ---- 인형 본체(막대 위) ----
+  ctx.save();
+  ctx.globalAlpha = 1;
+  ctx.translate(p.pivotX, p.pivotY - lift);
+  ctx.rotate(rock);
+  drawSticks();
+  ctx.drawImage(p.tile, p.ox - p.pivotX, p.oy - p.pivotY, p.dw, p.dh);
+  ctx.restore();
+}
+
 // 환호 파동을 도달한 인물에게 전파(방사형·시간차). 엿장수는 무시.
 function propagate(cdt) {
   for (let i = waves.length - 1; i >= 0; i--) {
@@ -275,26 +475,16 @@ function surf(px, py) {
   }
 }
 
-// 한 인물 타일을 들썩임·기울임·흥분·기술 변형과 함께 그린다.
+// 한 구경꾼 타일을 들썩임·기울임·흥분 변형과 함께 그린다.
 function drawFig(f) {
   const half = reduced ? 0.5 : 1;                   // reducedMotion: 진폭 절반
   const excBob = 1 + f.exc * 3.2;                   // 흥분 시 들썩 진폭 증폭
   const bob = f.amp * half * (0.55 * Math.sin(T * f.fbob + f.ph)) * excBob;
   const sway = f.amp * half * 0.4 * Math.sin(T * f.fbob * 0.6 + f.ph * 1.7) * excBob;
   const lift = f.exc * 7.5 * half;                  // 환호 시 솟구침
-  let rot = (reduced ? 0.011 : 0.022) * Math.sin(T * f.frot + f.ph) * (1 + f.exc * 1.5);
+  const rot = (reduced ? 0.011 : 0.022) * Math.sin(T * f.frot + f.ph) * (1 + f.exc * 1.5);
   const pop = f.r.kind === "crowd" ? f.exc * 0.03 : 0;  // 환호 시 살짝 커짐
-  let sx = 1.05 + pop, sy = 1.05 + pop, ox = sway, oy = bob - lift;
-
-  if (f.r.kind === "wrestler" && tech >= 0) {
-    // 들배지기: 0.8초에 걸쳐 들렸다 기울고 내려온다(사인 아치 이징)
-    const p = Math.min(1, tech / TECH_DUR);
-    const arc = Math.sin(p * Math.PI);              // 0→1→0
-    const tm = reduced ? 0.45 : 1;                  // reducedMotion: 기술 모션 완화
-    oy -= arc * f.hh * 0.42 * tm;                   // 들어올림
-    rot += arc * (reduced ? 0.08 : 0.17) * tm;      // 기울임
-    sx += arc * 0.05 * tm; sy += arc * 0.05 * tm;   // 살짝 팽창
-  }
+  const sx = 1.05 + pop, sy = 1.05 + pop, ox = sway, oy = bob - lift;
 
   ctx.save();
   ctx.translate(f.cx + ox, f.cy + oy);
@@ -328,7 +518,7 @@ export default {
     reduced = !!opts.reducedMotion; T = 0;
     img = opts.assets && opts.assets.target ? opts.assets.target : null;
     A = makeCanvas(W, H); actx = A.getContext("2d");
-    computeFit(); buildBase(); buildFigures();
+    computeFit(); buildBase(); buildFigures(); buildPuppet();
     waves = []; pressMoved = false; tech = -1;
   },
 
@@ -356,24 +546,24 @@ export default {
     const decay = Math.exp(-cdt / 0.55);
     for (const f of figs) if (f.exc > 0) { f.exc *= decay; if (f.exc < 0.002) f.exc = 0; }
 
-    // 렌더: 배경(한지+원작) → 구경꾼 → 씨름꾼(맨 위) → 파문
+    // 렌더: 배경(한지+원작) → 구경꾼 → 씨름꾼 종이 인형(그림자+본체, 맨 위) → 파문
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
     ctx.drawImage(A, 0, 0, W, H);
-    for (const f of figs) if (f.r.kind !== "wrestler") drawFig(f);
-    for (const f of figs) if (f.r.kind === "wrestler") drawFig(f);
+    for (const f of figs) drawFig(f);
+    drawPuppet();
     drawRipples();
   },
 
   resize(w, h) {
     W = w; H = h;
     A.width = W; A.height = H;
-    computeFit(); buildBase(); computeScreen();
+    computeFit(); buildBase(); computeScreen(); updatePuppetScreen();
     waves = [];
   },
 
   dispose() {
     ctx = null; actx = null; A = null; img = null;
-    figs = []; waves = [];
+    figs = []; waves = []; puppet = null;
   },
 };
