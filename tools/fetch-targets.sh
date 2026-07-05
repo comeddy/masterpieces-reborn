@@ -30,5 +30,8 @@ fetch 13-inwang-after-rain.jpg 1024 "Inwangjesaekdo.jpg"
 # 씨름 contain-fit 배경 (원작 1747×2079 세로형 · 800 요청 → 960px 허용 버킷 채택:
 # 1024/1280 버킷은 ~717KB로 600KB 상한 초과, 960px/445KB가 목표폭·용량 균형)
 fetch 14-ssireum.jpg 800 "Danwon-Ssireum.jpg"
+# 월하정인 contain-fit 배경 (원작 3216×2550 가로형 · 1024 요청 → 1280px 허용 버킷 채택:
+# 960/1280 두 버킷만 존재, 1280px/407KB가 목표폭 1024에 가장 근접하며 600KB 이내)
+fetch 15-lovers-moonlight.jpg 1024 "Hyewon-Wolha.jeongin-3.jpg"
 
-echo "완료: $(ls assets/targets/*.jpg | wc -l)/8"
+echo "완료: $(ls assets/targets/*.jpg | wc -l)/9"
