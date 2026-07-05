@@ -339,8 +339,10 @@ export default {
       if (Math.abs(ptr.dx) > 1.2) pressMoved = true;    // 실제로 움직였으면 드래그로 간주
       idle = 0;
       camX -= ptr.dx;                                   // 손가락 따라 두루마리를 편다
-      const v = -ptr.dx / cdt;                          // 손가락 속도(카메라 단위)
-      dragV += (v - dragV) * 0.35;                      // 평활화(관성 시드)
+      if (cdt > 1e-4) {                                 // 0 나눗셈(NaN) 방어
+        const v = -ptr.dx / cdt;                        // 손가락 속도(카메라 단위)
+        dragV += (v - dragV) * 0.35;                    // 평활화(관성 시드)
+      }
       camV = dragV;
     } else {
       idle += cdt;

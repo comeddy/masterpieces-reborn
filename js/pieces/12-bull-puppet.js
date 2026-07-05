@@ -56,7 +56,7 @@ let phase = 0, phaseT = 0;
 
 // 조종/돌진
 let grab = null;                 // 잡은 막대: "body" | "head" | "tail"
-let dragging = false, pressX = 0, pressY = 0, offX = 0, offY = 0;
+let dragging = false, pressX = 0, pressY = 0;
 let headDrag = 0, tailDrag = 0;  // 드래그로 향한 목표 각(월드)
 let charging = false, chargeT = 0, chargeDir = -1;
 let shake = 0;                   // 무대 미세 진동 강도
@@ -402,7 +402,7 @@ export default {
     bodyRot = approach(bodyRot, ch.lean + (reduced ? 0 : ch.bob * Math.sin(walkPh * Math.PI * 2) * 0.03), 8, dt);
     // 커튼 흔들림·무대 진동(돌진·울부짖음에 반응)
     const impulse = (charging ? 1 : 0) + ch.mouth * 0.5;
-    ch.sway = approach(ch.sway, impulse, 3, dt);
+    ch.sway = approach(ch.sway, impulse * (reduced ? 0.4 : 1), 3, dt);
     shake = approach(shake, reduced ? impulse * 0.12 : impulse, 5, dt);
 
     // ---- 렌더 ----
