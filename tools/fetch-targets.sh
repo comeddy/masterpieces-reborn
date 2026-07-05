@@ -25,5 +25,7 @@ fetch 04-mona-lisa.jpg       256 "Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_re
 # 화면 표시용 (등불 리빌·프레스코·판화 배경 — 고해상 필요)
 fetch 06-night-watch.jpg     1024 "The_Night_Watch_-_HD.jpg"
 fetch 09-creation-of-adam.jpg 1024 "Michelangelo_-_Creation_of_Adam_(cropped).jpg"
+# 인왕제색도 contain-fit 배경 (1024 요청 → 1280px 허용 버킷 채택, 수묵 먹빛 대비 보존)
+fetch 13-inwang-after-rain.jpg 1024 "Inwangjesaekdo.jpg"
 
-echo "완료: $(ls assets/targets/*.jpg | wc -l)/6"
+echo "완료: $(ls assets/targets/*.jpg | wc -l)/7"
