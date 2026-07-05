@@ -41,8 +41,8 @@ export const WORKS = [
   {
     no: "05", wing: "light", title: "After Monet — Impression, Sunrise", ko: "인상, 해돋이",
     medium: "Living seascape · after Monet (1872, public domain)", year: "2026",
-    note: "인상주의라는 이름을 낳은 르아브르의 새벽이 실시간으로 다시 밝아온다. 주황 태양이 고동치고, 부서진 반사광이 수면 위에서 명멸하며, 조각배는 안개 속을 느리게 지난다. 물결을 만지면 빛의 인상이 번져나간다.",
-    hint: "수면을 드래그해 물결을 만드세요 · 클릭으로 큰 파문",
+    note: "인상주의라는 이름을 낳은 르아브르의 새벽이 실시간으로 다시 밝아온다. 밝은 노랑 태양이 고동치고, 부서진 반사광이 수면 위에서 명멸하며, 조각배는 안개 속을 느리게 지난다. 태양을 클릭하면 눈부신 빛이 사방으로 뻗어나간다.",
+    hint: "수면을 드래그해 물결을 만드세요 · 클릭하면 태양이 눈부시게 빛난다",
     module: "./pieces/05-impression-sunrise.js",
   },
   {

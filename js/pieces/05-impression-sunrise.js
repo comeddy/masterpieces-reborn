@@ -1,6 +1,7 @@
 // js/pieces/05-impression-sunrise.js
 // After Monet — Impression, Sunrise (1872). 절차적 재해석: 안개 낀 르아브르 항구 새벽.
-// 이미지 미사용. 청회색 안개 하늘 + 가로 붓질 바다 + 고동치는 주황 태양 + 부서진 반사 + 조각배.
+// 이미지 미사용. 청회색 안개 하늘 + 가로 붓질 바다 + 고동치는 밝은 노랑 태양 + 부서진 반사 + 조각배.
+// 클릭 시 태양 중심에서 방사형 광선이 사방으로 뻗으며 코어가 눈부시게 밝아진다.
 
 const TWO_PI = Math.PI * 2;
 const RIPPLE_SPEED = 150;   // 리플 링이 바깥으로 번지는 속도(px/s)
@@ -18,6 +19,7 @@ let fog = [];          // {x, y, r, vx, drift, ph, a} — 느리게 흐르는 �
 let refl = [];         // {t, x, w, ph, base} — 태양 아래 부서진 반사 조각
 let boats = [];        // {x, y, s, bp, bs, amp} — 검은 조각배 실루엣
 const ripples = [];    // {x, y, t, strength} — 드래그/클릭 파원
+const bursts = [];     // {t, dur, maxLen, rays[]} — 클릭 시 태양 중심에서 뻗는 방사형 광선
 const gulls = [];      // {x, y, vx, ph} — 이따금 지나가는 갈매기 점
 let gullTimer = 3, dragAccum = 0;
 
@@ -91,6 +93,29 @@ function addRipple(x, y, s) {
   if (ripples.length > MAX_RIPPLES) ripples.shift();
 }
 
+// 클릭 시 태양 중심에서 사방으로 뻗는 방사형 광선 한 다발 생성
+// 광선마다 각도·길이·두께·위상이 조금씩 달라 자연스럽게 흩어진다
+function addSunburst() {
+  const n = reduced ? 10 : Math.round(rnd(16, 22));   // 광선 수(감속 시 축소)
+  const base = Math.random() * TWO_PI;                // 다발 전체 회전 위상
+  const rays = [];
+  for (let i = 0; i < n; i++) {
+    rays.push({
+      a: base + (i / n) * TWO_PI + rnd(-0.13, 0.13),  // 균등 분포 + 지터
+      lf: rnd(0.55, 1.15),                            // 길이 계수(불규칙)
+      w: rnd(1.5, 4),                                 // 두께
+      ph: rnd(0, TWO_PI),                             // 흔들림 위상
+    });
+  }
+  bursts.push({
+    t: 0,
+    dur: reduced ? 1.6 : 2.6,                          // 잦아드는 데 걸리는 시간
+    maxLen: sunR * (reduced ? 5 : 9),                 // 최대 광선 길이(감속 시 축소)
+    rays,
+  });
+  if (bursts.length > 4) bursts.shift();
+}
+
 function drawSky() {
   const g = ctx.createLinearGradient(0, 0, 0, horizonY + seaH * 0.1);
   g.addColorStop(0, "#41505d");
@@ -142,20 +167,55 @@ function drawSea() {
 }
 
 function drawSun() {
-  const r = sunR * (1 + Math.sin(T * 1.4) * 0.06 * mo);          // 반경 펄스
-  const glowR = sunR * (3.4 + Math.sin(T * 1.1) * 0.5 * mo) + sunFlash * sunR * 4;
+  const fl = Math.min(1, sunFlash);                             // 섬광 정도 0~1
+  const r = sunR * (1 + Math.sin(T * 1.4) * 0.06 * mo) * (1 + fl * 0.18); // 반경 펄스 + 섬광 팽창
+  const glowR = sunR * (3.4 + Math.sin(T * 1.1) * 0.5 * mo) + sunFlash * sunR * 4.5;
   ctx.globalCompositeOperation = "lighter";
   const g = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, glowR);
-  g.addColorStop(0, `rgba(255,120,66,${0.5 + sunFlash * 0.4})`);
-  g.addColorStop(0.4, "rgba(255,110,60,0.18)");
-  g.addColorStop(1, "rgba(255,110,60,0)");
+  g.addColorStop(0, `rgba(255,244,190,${0.5 + sunFlash * 0.45})`); // 따뜻한 노랑-흰빛 코어광
+  g.addColorStop(0.4, "rgba(255,214,80,0.2)");
+  g.addColorStop(1, "rgba(255,210,63,0)");
   ctx.fillStyle = g;
   ctx.fillRect(sunX - glowR, sunY - glowR, glowR * 2, glowR * 2);
   ctx.globalCompositeOperation = "source-over";
-  ctx.fillStyle = "#ff6a39";
+  // 코어: 평상시 밝은 노랑 → 섬광 시 흰빛으로
+  const cg = Math.round(210 + fl * 45);                         // 210 → 255
+  const cb = Math.round(63 + fl * 185);                         // 63 → 248 (흰빛)
+  ctx.fillStyle = `rgb(255,${cg},${cb})`;
   ctx.beginPath();
   ctx.arc(sunX, sunY, r, 0, TWO_PI);
   ctx.fill();
+}
+
+// 클릭 광선: 태양 중심에서 뻗어 성장(ease-out)했다가 전체가 페이드
+function drawSunburst() {
+  if (!bursts.length) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  for (const b of bursts) {
+    const life = b.t / b.dur;                                   // 0~1 수명
+    const grow = 1 - Math.pow(1 - Math.min(1, b.t / (b.dur * 0.4)), 3); // 정점까지 빠르게 성장
+    const alpha = Math.max(0, 1 - life) ** 1.6;                 // 후반으로 갈수록 잦아듦
+    if (alpha <= 0) continue;
+    for (const ray of b.rays) {
+      const ang = ray.a + Math.sin(b.t * 1.6 + ray.ph) * 0.03;  // 미세한 회전 흔들림
+      const len = b.maxLen * ray.lf * grow;
+      const x2 = sunX + Math.cos(ang) * len;
+      const y2 = sunY + Math.sin(ang) * len;
+      const rg = ctx.createLinearGradient(sunX, sunY, x2, y2);
+      rg.addColorStop(0, `rgba(255,248,210,${0.55 * alpha})`);
+      rg.addColorStop(0.5, `rgba(255,224,102,${0.26 * alpha})`);
+      rg.addColorStop(1, "rgba(255,210,63,0)");                 // 끝은 투명 → 부드러운 소멸
+      ctx.strokeStyle = rg;
+      ctx.lineWidth = ray.w * (0.5 + grow * 0.8);
+      ctx.beginPath();
+      ctx.moveTo(sunX, sunY);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
 }
 
 function drawReflections() {
@@ -170,7 +230,8 @@ function drawReflections() {
     let bright = p.base * (0.5 + 0.5 * Math.sin(T * (2 + p.t * 2) + p.ph));
     bright = Math.max(0, Math.min(1, bright + rf * 0.04));
     const yj = y + Math.sin(T * 1.5 + p.ph) * 2 + rf * 0.5;
-    ctx.fillStyle = `rgba(255,${150 + Math.round(bright * 80)},90,${0.10 + bright * 0.28})`;
+    // 태양색과 조화되는 노랑 계열: 밝아질수록 흰빛으로 (녹·청 채널 상승)
+    ctx.fillStyle = `rgba(255,${205 + Math.round(bright * 45)},${95 + Math.round(bright * 60)},${0.10 + bright * 0.28})`;
     ctx.fillRect(x - len / 2, yj, len, 2 + p.t * 2);
   }
   ctx.globalCompositeOperation = "source-over";
@@ -229,7 +290,7 @@ export default {
     ctx = opts.ctx; W = opts.width; H = opts.height;
     reduced = !!opts.reducedMotion; mo = reduced ? 0.5 : 1;
     T = 0; sunFlash = 0; dragAccum = 0; gullTimer = 3;
-    ripples.length = 0; gulls.length = 0;
+    ripples.length = 0; bursts.length = 0; gulls.length = 0;
     build();
   },
   tick(dt, ptr) {
@@ -239,20 +300,29 @@ export default {
       dragAccum += Math.hypot(ptr.dx, ptr.dy);
       if (dragAccum > 20) { addRipple(ptr.x, ptr.y, 6); dragAccum = 0; }
     }
-    // 클릭: 큰 리플 링 + 태양 글로우 한 번 크게
-    if (ptr.justDown) { addRipple(ptr.x, ptr.y, 15); sunFlash = 1.3; }
+    // 클릭: 수면 리플 + 태양 중심 방사형 광선 + 코어 섬광(클릭 위치와 무관, 중심은 늘 태양)
+    if (ptr.justDown) {
+      addRipple(ptr.x, ptr.y, 15);
+      addSunburst();
+      sunFlash = reduced ? 0.7 : 1.3;                 // 감속 시 섬광 감쇠
+    }
 
     for (let i = ripples.length - 1; i >= 0; i--) {
       ripples[i].t += dt;
       if (ripples[i].t > 7) ripples.splice(i, 1);
     }
-    sunFlash = Math.max(0, sunFlash - dt * 0.8);
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      bursts[i].t += dt;
+      if (bursts[i].t > bursts[i].dur) bursts.splice(i, 1);
+    }
+    sunFlash = Math.max(0, sunFlash - dt * 0.45);      // 2~3초에 걸쳐 잦아듦
     updateGulls(dt);
 
     drawSky();
     drawFog(dt);
     drawSea();
     drawSun();
+    drawSunburst();
     drawReflections();
     drawBoats();
     drawGulls();
@@ -261,6 +331,6 @@ export default {
   dispose() {
     ctx = null;
     bands = []; fog = []; refl = []; boats = [];
-    ripples.length = 0; gulls.length = 0;
+    ripples.length = 0; bursts.length = 0; gulls.length = 0;
   },
 };
