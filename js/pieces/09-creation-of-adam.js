@@ -9,9 +9,10 @@ const IGNITE_TIME = 0.8;  // 대형 아크 방전 지속
 const COOLDOWN_TIME = 3;  // 쿨다운
 const WARM_TIME = 1.5;    // 이미지가 따뜻하게 밝아지는 시간
 
-// 두 손끝 좌표(이미지 기준 u,v). 좌: 아담(아래에서), 우: 신(위에서)
-const LEFT_UV = { u: 0.42, v: 0.52 };
-const RIGHT_UV = { u: 0.58, v: 0.48 };
+// 두 손끝 좌표(이미지 기준 u,v). 좌: 아담 검지 끝(좌하 손), 우: 신 검지 끝(우 손)
+// 번들 이미지(1280×581 전체 프레스코)에서 실측한 두 손끝 — 화면 중앙 좌측에서 거의 맞닿는 지점
+const LEFT_UV = { u: 0.378, v: 0.456 };
+const RIGHT_UV = { u: 0.382, v: 0.450 };
 
 let W = 0, H = 0, ctx = null, T = 0, reduced = false;
 let img = null, fresco = null, fit = { x: 0, y: 0, w: 0, h: 0 };
