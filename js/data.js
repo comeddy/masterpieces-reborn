@@ -3,6 +3,7 @@ export const WINGS = [
   { id: "wave",  index: "Ⅰ", name: "The Wave Hall",      sub: "파도의 방", accent: "#5aa7d8" },
   { id: "light", index: "Ⅱ", name: "Light & Atmosphere", sub: "빛의 방",   accent: "#e8b46a" },
   { id: "dream", index: "Ⅲ", name: "Form & Dream",       sub: "꿈의 방",   accent: "#b48ad8" },
+  { id: "korea", index: "Ⅳ", name: "Korean Masters", sub: "한국의 방", accent: "#63b8a0" },
 ];
 
 export const WORKS = [
@@ -94,6 +95,36 @@ export const WORKS = [
     note: "이중섭의 황소가 가위로 오려낸 종이 인형이 되어 작은 무대에 오른다. 굵은 윤곽과 황토빛 붓질의 조각들이 막대 끝에서 움직이며 느릿하게 걷고, 고개를 흔들고, 이따금 온몸으로 울부짖는다. 막대를 잡아 직접 조종해보라 — 소는 당신의 손끝에서도 이중섭의 소로 남는다.",
     hint: "드래그로 막대를 잡아 조종하세요 · 클릭으로 돌진 · 가만두면 소극이 계속됩니다",
     module: "./pieces/12-bull-puppet.js",
+  },
+
+  // ---- Ⅳ관 · 한국의 방 — 조선 회화, 신규 기법 ----
+  {
+    no: "13", wing: "korea", title: "After Jeong Seon — Inwang After Rain", ko: "인왕제색도",
+    medium: "Ink-wash diffusion · after Jeong Seon (1751, public domain)", year: "2026",
+    note: "비 갠 인왕산의 물기 어린 공기가 되살아난다. 안개가 산허리를 감싸며 흘렀다 걷히기를 반복하고, 화면을 누르면 먹 한 방울이 화선지에 스며 번져나간다. 진경산수의 바위 절벽은 먹빛이 깊을수록 단단해진다 — 겸재가 그린 비 갠 아침 그대로.",
+    hint: "화면을 눌러 먹을 떨어뜨리세요 · 드래그로 안개를 밀어내세요",
+    module: "./pieces/13-inwang-after-rain.js", asset: "assets/targets/13-inwang-after-rain.jpg",
+  },
+  {
+    no: "14", wing: "korea", title: "After Kim Hong-do — Ssireum", ko: "씨름",
+    medium: "Living crowd · after Kim Hong-do (c.1780, public domain)", year: "2026",
+    note: "단원의 씨름판이 실제로 벌어진다. 구경꾼 하나하나가 저마다의 리듬으로 들썩이고 부채를 부치다가, 씨름꾼이 기술을 거는 순간 환호가 물결처럼 번져나간다. 그 소란 속에서도 엿장수만은 무심히 제 갈 길을 간다 — 단원이 숨겨둔 웃음 그대로.",
+    hint: "클릭으로 기술을 거세요 · 환호가 물결처럼 번집니다 · 드래그로 파도응원",
+    module: "./pieces/14-ssireum.js", asset: "assets/targets/14-ssireum.jpg",
+  },
+  {
+    no: "15", wing: "korea", title: "After Shin Yun-bok — Lovers under the Moon", ko: "월하정인",
+    medium: "Moonlight narrative · after Shin Yun-bok (c.1793, public domain)", year: "2026",
+    note: "'달빛 침침한 삼경, 두 사람 마음은 두 사람만 안다(月沈沈夜三更 兩人心事兩人知).' 혜원이 담벼락에 적어둔 그 밤이 흐른다. 초승달이 천천히 차고 기울며 밤의 깊이가 변하고, 당신의 커서가 구름이 되어 달을 가리면 — 초롱불 하나만 남은 어둠 속에서 밀회는 조금 더 깊어진다.",
+    hint: "커서가 구름이 되어 달을 가립니다 · 클릭으로 초롱불 깜빡임",
+    module: "./pieces/15-lovers-moonlight.js", asset: "assets/targets/15-lovers-moonlight.jpg",
+  },
+  {
+    no: "16", wing: "korea", title: "After An Gyeon — Dream Journey", ko: "몽유도원도",
+    medium: "Scroll journey · after An Gyeon (1447, public domain)", year: "2026",
+    note: "안평대군이 꿈에서 본 복사꽃 이상향을 안견이 사흘 만에 그렸다. 두루마리를 펼치듯 화면을 끌면 왼쪽의 현실 세계에서 험준한 기암절벽을 지나 오른쪽 도원경으로 여행이 이어진다. 가만히 두면 꿈이 스스로 흘러간다 — 도원에 이르면 복사꽃잎이 바람에 날린다.",
+    hint: "드래그로 두루마리를 펼치세요 · 꿈은 왼쪽에서 오른쪽으로 흐릅니다",
+    module: "./pieces/16-dream-journey.js", asset: "assets/targets/16-dream-journey.jpg",
   },
 ];
 
