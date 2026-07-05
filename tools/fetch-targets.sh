@@ -33,5 +33,9 @@ fetch 14-ssireum.jpg 800 "Danwon-Ssireum.jpg"
 # 월하정인 contain-fit 배경 (원작 3216×2550 가로형 · 1024 요청 → 1280px 허용 버킷 채택:
 # 960/1280 두 버킷만 존재, 1280px/407KB가 목표폭 1024에 가장 근접하며 600KB 이내)
 fetch 15-lovers-moonlight.jpg 1024 "Hyewon-Wolha.jeongin-3.jpg"
+# 몽유도원도 두루마리 가로 카메라 배경 (원작 8773×3185 초가로형 두루마리 · 1600 요청 →
+# 1920px 허용 버킷 채택: 버킷은 1280/1920/3840만 존재, 3840px는 ~2.2MB로 600KB 초과 →
+# 그 아래 1920px/545KB가 목표폭 ~1600 이상이면서 600KB 이내)
+fetch 16-dream-journey.jpg 1920 "Mongyudowondo.jpg"
 
-echo "완료: $(ls assets/targets/*.jpg | wc -l)/9"
+echo "완료: $(ls assets/targets/*.jpg | wc -l)/10"
