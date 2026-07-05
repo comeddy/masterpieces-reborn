@@ -92,8 +92,8 @@ export const WORKS = [
   {
     no: "12", wing: "dream", title: "After Lee Jung-seob — Bull", ko: "황소",
     medium: "Paper puppet theatre · after Lee Jung-seob (c.1953)", year: "2026",
-    note: "이중섭의 황소가 가위로 오려낸 종이 인형이 되어 작은 무대에 오른다. 굵은 윤곽과 황토빛 붓질의 조각들이 막대 끝에서 움직이며 느릿하게 걷고, 고개를 흔들고, 이따금 온몸으로 울부짖는다. 막대를 잡아 직접 조종해보라 — 소는 당신의 손끝에서도 이중섭의 소로 남는다.",
-    hint: "드래그로 막대를 잡아 조종하세요 · 클릭으로 돌진 · 가만두면 소극이 계속됩니다",
+    note: "이중섭의 황소가 가위로 오려낸 종이 인형이 되어 작은 무대에 오른다. 굵은 윤곽과 황톳빛 붓질의 조각들이 막대 끝에서 움직이며 느릿하게 걷고, 고개를 흔들고, 이따금 온몸으로 울부짖는다. 막대를 잡으면 소는 당신의 손끝에서도 이중섭의 소로 남는다.",
+    hint: "드래그로 막대를 잡아 조종하세요 · 클릭으로 돌진 · 가만히 두면 소극이 계속됩니다",
     module: "./pieces/12-bull-puppet.js",
   },
 
@@ -115,7 +115,7 @@ export const WORKS = [
   {
     no: "15", wing: "korea", title: "After Shin Yun-bok — Lovers under the Moon", ko: "월하정인",
     medium: "Moonlight narrative · after Shin Yun-bok (c.1793, public domain)", year: "2026",
-    note: "'달빛 침침한 삼경, 두 사람 마음은 두 사람만 안다(月沈沈夜三更 兩人心事兩人知).' 혜원이 담벼락에 적어둔 그 밤이 흐른다. 초승달이 천천히 차고 기울며 밤의 깊이가 변하고, 당신의 커서가 구름이 되어 달을 가리면 — 초롱불 하나만 남은 어둠 속에서 밀회는 조금 더 깊어진다.",
+    note: "'달빛 침침한 삼경, 두 사람 마음은 두 사람만 안다(月沈沈夜三更 兩人心事兩人知).' 혜원이 화폭 한켠에 적어둔 그 밤이 흐른다. 초승달이 천천히 차고 기울며 밤의 깊이가 변하고, 당신의 커서가 구름이 되어 달을 가리면 — 초롱불 하나만 남은 어둠 속에서 밀회는 조금 더 깊어진다.",
     hint: "커서가 구름이 되어 달을 가립니다 · 클릭으로 초롱불 깜빡임",
     module: "./pieces/15-lovers-moonlight.js", asset: "assets/targets/15-lovers-moonlight.jpg",
   },

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WINGS, WORKS, wingOf } from "../js/data.js";
 
-test("전시관은 3개이고 필수 필드를 가진다", () => {
+test("전시관은 4개이고 필수 필드를 가진다", () => {
   assert.equal(WINGS.length, 4);
   for (const w of WINGS) {
     for (const k of ["id", "index", "name", "sub", "accent"]) assert.ok(w[k], `${w.id}.${k}`);
