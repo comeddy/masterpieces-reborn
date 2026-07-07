@@ -1,38 +1,41 @@
 // js/pieces/04-mona-lisa.js
-// After Leonardo — Mona Lisa (c.1503) · sfumato 안개 입자
-import { ParticleField } from "../particle-engine.js";
+// After Leonardo — Mona Lisa (c.1503) · 점묘 안개 초상
+// 점(입자)만으로 얼굴을 해상한다: 얼굴 영역을 고밀도로 샘플링해 응집 시
+// 눈·코·입(미소)이 쇠라의 점묘처럼 또렷이 읽히게 한다. 흩어지면 sfumato 연기.
+import { ParticleField, samplePoints } from "../particle-engine.js";
 
 const TAU = Math.PI * 2;
 const SPRING = 3.6;            // 기본 복원 강성
 const MONO = [116, 98, 76];   // 안개 상태의 갈색-회갈색 모노톤
+
+// 얼굴 박스(원작 960×1431 자산 실측 · 이미지 정규화 u,v).
+// 눈·코·입을 감싸는 영역 — 여기에 입자를 몰아넣어 점만으로 이목구비를 해상한다.
+const FACE = { u0: 0.30, u1: 0.68, v0: 0.10, v1: 0.45 };
+// 미소 밴드(입 중심 u≈0.46, v≈0.33) — 복원이 가장 느려 미소가 마지막에 맺힌다.
+const SMILE = { u0: 0.37, u1: 0.55, v0: 0.30, v1: 0.365 };
 
 let ctx = null, W = 0, H = 0, T = 0, reduced = false;
 let field = null;
 let bg = null;                 // 오프스크린 배경 그라데이션
 let fog = 0;                   // 전역 안개 계수 (0 응집 ~ 1 흩어짐)
 let cx0 = 0, cy0 = 0;          // 입자 목표 바운딩 박스 중심
-let srcImg = null;             // 원작 이미지 (리빌 크로스페이드용 · 없으면 리빌 비활성)
-let reveal = 0;                // 안개 걷힘 계수 (0 안개 ~ 1 선명한 원작)
-let revealSmile = 0;           // 미소 밴드 전용 리빌 (main을 늦게 추종 → 미소가 마지막에 완성)
 
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height;
     reduced = !!opts.reducedMotion; T = 0; fog = 0;
-    reveal = 0; revealSmile = 0;
 
     const img = opts.assets && opts.assets.target ? opts.assets.target : null;
-    srcImg = img;              // 있으면 응집 시 원작이 서서히 드러난다
-    const count = reduced ? 3200 : 6200;
+    const built = buildPoints(img);   // { points, aspect }
     field = new ParticleField({
-      image: img,
-      points: img ? null : makePortraitPoints(), // null이면 초상 실루엣 절차 points
-      count, w: W, h: H, margin: 0.1,
-      spring: SPRING, damping: 3.4, jitter: 4,
+      points: built.points, aspect: built.aspect, count: built.points.length,
+      w: W, h: H, margin: 0.1,
+      spring: SPRING, damping: 3.4, jitter: 2.5,
+      sizeMin: 1.1, sizeMax: 2.2,
     });
 
     buildBackground();
-    tagParticles(); // 미소 영역 판별 · 숨쉬기 기준 목표 기록
+    tagParticles(); // 얼굴/미소 판별 · 숨쉬기 기준 목표 기록
   },
 
   tick(dt, ptr) {
@@ -42,9 +45,6 @@ export default {
     if (ptr.inside && ptr.justDown) {
       // 클릭 = 안개 폭발: 전체를 방사형으로 밀치고 이후 spring으로 서서히 응결
       field.scatter(ptr.x, ptr.y, Math.min(W, H) * 0.95, reduced ? 130 : 260);
-      // 흩뜨리는 순간 원작은 즉시(수백 ms) 안개로 사라진다 — 재응집은 천천히
-      reveal *= reduced ? 0.45 : 0.12;
-      revealSmile *= reduced ? 0.45 : 0.12;
     } else if (ptr.inside && ptr.down) {
       // 드래그 = sfumato 휘젓기: 소용돌이 + 커서 주변 의사 컬 노이즈
       const sp = Math.hypot(ptr.dx, ptr.dy);
@@ -57,7 +57,6 @@ export default {
     applyBreathing();
     field.step(dt);
     updateFog(dt);
-    updateReveal(dt);
 
     // 3) 렌더
     render();
@@ -70,10 +69,38 @@ export default {
     tagParticles();
   },
 
-  dispose() { ctx = null; field = null; bg = null; srcImg = null; },
+  dispose() { ctx = null; field = null; bg = null; },
 };
 
-// ── 입자 태깅: 미소 영역 spring 감쇠 + 숨쉬기 기준점 ───────────────
+// ── 목표점 구성: 전체 기본 샘플 + 얼굴 박스 고밀도 샘플 (점만으로 얼굴 해상) ─
+function buildPoints(img) {
+  if (!img) return { points: makePortraitPoints(), aspect: 0.75 }; // 폴백: 절차적 실루엣
+  const iw = img.naturalWidth || img.width;
+  const ih = img.naturalHeight || img.height;
+  const baseN = reduced ? 4200 : 7000;
+  const faceTarget = reduced ? 3200 : 5000;
+  const boxArea = (FACE.u1 - FACE.u0) * (FACE.v1 - FACE.v0); // ≈0.133
+  // 얼굴 박스 내부에서 faceTarget개를 얻도록 전체를 큰 count로 샘플 후 필터
+  const faceSampleN = Math.round(faceTarget / boxArea);
+  const base = samplePoints(img, { count: baseN });
+  const face = samplePoints(img, { count: faceSampleN }).filter(inFace);
+  const points = base.concat(face);
+  shuffle(points); // 화면 면적 캡(w*h/110)이 얼굴·배경을 고르게 자르도록
+  return { points, aspect: iw / ih };
+}
+
+function inFace(p) {
+  return p.u >= FACE.u0 && p.u <= FACE.u1 && p.v >= FACE.v0 && p.v <= FACE.v1;
+}
+
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+}
+
+// ── 입자 태깅: 얼굴/미소 판별 + 미소 spring 감쇠 + 숨쉬기 기준점 ───────
 function tagParticles() {
   const ps = field.particles;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -81,17 +108,16 @@ function tagParticles() {
     if (p.tx < minX) minX = p.tx; if (p.tx > maxX) maxX = p.tx;
     if (p.ty < minY) minY = p.ty; if (p.ty > maxY) maxY = p.ty;
   }
-  const spanX = Math.max(1, maxX - minX), spanY = Math.max(1, maxY - minY);
-  cx0 = minX + spanX / 2; cy0 = minY + spanY / 2;
+  cx0 = (minX + maxX) / 2; cy0 = (minY + maxY) / 2;
 
   for (const p of ps) {
-    const u = (p.tx - minX) / spanX, v = (p.ty - minY) / spanY;
     p.bx = p.tx; p.by = p.ty;                 // 숨쉬기 기준 목표
     p.phase = Math.random() * TAU;            // 개별 위상
-    // 미소 영역(입 주변)은 복원이 가장 느림.
-    // 원작 04-mona-lisa.jpg 픽셀 측정값(입 중심 u≈0.45, v≈0.31).
-    const smile = u > 0.37 && u < 0.53 && v > 0.275 && v < 0.345;
+    // 이미지 정규화 좌표(p.u,p.v)로 얼굴/미소 판별 — 점만으로 이목구비를 해상
+    p.isFace = inFace(p);
+    const smile = p.u >= SMILE.u0 && p.u <= SMILE.u1 && p.v >= SMILE.v0 && p.v <= SMILE.v1;
     p.isSmile = smile;
+    // 미소 영역(입 주변)은 복원이 가장 느림 → 얼굴이 맺힐 때 미소가 마지막에 완성
     p.spring = smile ? SPRING * 0.4 : SPRING;
   }
 }
@@ -134,68 +160,83 @@ function updateFog(dt) {
   fog += (target - fog) * Math.min(1, dt * 3);
 }
 
-// ── 리빌: 응집(낮은 fog)이면 원작이 서서히 드러나고, 흩어지면 빠르게 사라진다 ─
-// 비대칭 이징 — 차오름은 느리게(2~4초), 사라짐은 빠르게(수백 ms). 미소는 가장 늦게.
-function updateReveal(dt) {
-  if (!srcImg) return; // 이미지 없으면 리빌 비활성 (절차적 폴백은 입자만)
-  // fog≤0.08 → 완전 선명(1), fog≥0.42 → 안개(0)
-  const coherence = Math.max(0, Math.min(1, (0.42 - fog) / 0.34));
-  const up = reduced ? 1.3 : 0.85;   // 느린 리빌 (τ≈1.2s → 3~4초에 선명)
-  const down = reduced ? 6 : 9;      // 빠른 소멸 (τ≈0.11s → 수백 ms)
-  reveal += (coherence - reveal) * Math.min(1, dt * (coherence > reveal ? up : down));
-  // 미소 밴드는 main 리빌을 더 느리게 추종 → 얼굴이 돌아올 때 미소가 마지막에 완성
-  const sUp = reduced ? 0.9 : 0.42, sDown = reduced ? 6 : 9;
-  revealSmile += (reveal - revealSmile) * Math.min(1, dt * (reveal > revealSmile ? sUp : sDown));
-}
-
-// ── 렌더: 부드러운 연기 (헤일로 + 코어 2겹, 잔상 트레일) + 원작 리빌 ─
+// ── 렌더: 점묘 초상 ─────────────────────────────────────────────
+// 흩어지면 부드러운 연기(헤일로 additive), 응집하면 얼굴 입자가 작고 또렷한
+// source-over 점묘로 전환되어 눈·코·입(미소)이 점의 집합으로 읽힌다.
 function render() {
-  // 반투명 배경 재도포 → 연기 잔상
+  // 반투명 배경 재도포 → 연기 잔상 (정지한 점은 매 프레임 다시 찍혀 또렷이 유지)
   ctx.globalAlpha = reduced ? 0.6 : 0.32;
   ctx.drawImage(bg, 0, 0, W, H);
   ctx.globalAlpha = 1;
 
-  // 리빌: 안개가 걷히면 실제 원작이 드러난다. 입자 필드와 동일한
-  // contain-fit 박스(field.fit)에 그려 입자·이미지가 정확히 겹친다.
-  if (srcImg && reveal > 0.003) {
-    const f = field.fit;
-    ctx.globalAlpha = reveal;
-    ctx.drawImage(srcImg, f.x, f.y, f.w, f.h);
-    ctx.globalAlpha = 1;
-    // 미소는 가장 늦게 — 남은 안개가 입가에 마지막까지 머문다 (부드러운 원형 베일)
-    const gap = reveal - revealSmile;
-    if (gap > 0.012) {
-      const mx = f.x + 0.45 * f.w, my = f.y + 0.31 * f.h; // 입 중심 (실측 u≈0.45, v≈0.31)
-      const mr = f.w * 0.22;
-      const veil = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
-      veil.addColorStop(0, "rgba(26,20,12," + gap + ")");
-      veil.addColorStop(0.55, "rgba(26,20,12," + (gap * 0.6) + ")");
-      veil.addColorStop(1, "rgba(26,20,12,0)");
-      ctx.fillStyle = veil;
-      ctx.beginPath(); ctx.arc(mx, my, mr, 0, TAU); ctx.fill();
-    }
-  }
-
-  // 입자: 리빌이 차오를수록 옅어지되 완전히 사라지진 않는다 (안개 잔결)
-  const pfade = 1 - reveal * 0.82;
   const ps = field.particles;
+  const coh = Math.max(0, Math.min(1, 1 - fog)); // 응집도 (0 연기 ~ 1 또렷)
+
+  // 패스 1 (additive): 헤일로 — sfumato 안개 글로우.
+  //   배경은 항상 부드럽게, 얼굴은 응집할수록 헤일로가 걷혀 디테일이 드러난다.
   ctx.globalCompositeOperation = "lighter";
   for (const p of ps) {
-    // 색: 응집이면 원색, 흩어질수록 모노톤 (전역 fog + 개별 거리)
-    const d = Math.hypot(p.tx - p.x, p.ty - p.y);
-    const lf = Math.min(1, Math.max(fog, d / 70));
-    const r = (p.r + (MONO[0] - p.r) * lf) | 0;
-    const g = (p.g + (MONO[1] - p.g) * lf) | 0;
-    const b = (p.b + (MONO[2] - p.b) * lf) | 0;
-    const s = (p.size || 1.5) * (0.72 + 0.28 * pfade);
-    // 헤일로: 큰 원 + 낮은 알파 → 안개
-    ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + (0.06 * pfade) + ")";
-    ctx.beginPath(); ctx.arc(p.x, p.y, s * 2.6, 0, TAU); ctx.fill();
-    // 코어: 작은 원 → 형상의 심
-    ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + (0.5 * pfade) + ")";
-    ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.8, 0, TAU); ctx.fill();
+    const ha = p.isFace ? 0.06 * (1 - coh) : 0.05; // 얼굴 헤일로는 응집 시 소멸
+    if (ha < 0.003) continue;
+    const c = shade(p);
+    // 어두운 점(드레스·머리·그늘)은 additive 글로우에 거의 기여하지 않는다 →
+    // 큰 헤일로 원 그리기를 건너뛰어 비용을 줄이고 어두운 영역을 어둡게 유지.
+    if (c[0] + c[1] + c[2] < 135) continue;
+    const s = (p.size || 1.5) * 2.6;
+    ctx.fillStyle = "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + ha + ")";
+    ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, TAU); ctx.fill();
+  }
+  // 패스 2 (additive): 배경 코어 — 부드러운 연기 심 (sfumato 보존).
+  //   낮은 알파로 밝은 영역(가슴·하늘)이 additive 합산으로 하얗게 번지는 것을 억제.
+  for (const p of ps) {
+    if (p.isFace) continue;
+    const c = shade(p);
+    const s = (p.size || 1.5) * 0.8;
+    ctx.fillStyle = "rgba(" + c[0] + "," + c[1] + "," + c[2] + ",0.34)";
+    ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, TAU); ctx.fill();
+  }
+  // 패스 3 (source-over): 얼굴 코어 — 응집할수록 작고 조밀·불투명한 점묘.
+  //   additive가 아니라 실제 색을 덮으므로 눈·입 그늘이 어둡게 남는다
+  //   (사진 리빌이 아니라 점의 집합으로 얼굴이 해상된다).
+  ctx.globalCompositeOperation = "source-over";
+  for (const p of ps) {
+    if (!p.isFace) continue;
+    const c = faceShade(p, coh);
+    const a = 0.42 + 0.53 * coh;                       // 0.42(연기) → 0.95(응집)
+    const s = (p.size || 1.5) * (0.92 - 0.26 * coh);   // 응집할수록 작고 조밀
+    ctx.fillStyle = "rgba(" + c[0] + "," + c[1] + "," + c[2] + "," + a + ")";
+    ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, TAU); ctx.fill();
   }
   ctx.globalCompositeOperation = "source-over";
+}
+
+// 응집이면 원색, 흩어질수록 모노톤 (전역 fog + 개별 목표거리)
+function shade(p) {
+  const d = Math.hypot(p.tx - p.x, p.ty - p.y);
+  const lf = Math.min(1, Math.max(fog, d / 70));
+  return [
+    (p.r + (MONO[0] - p.r) * lf) | 0,
+    (p.g + (MONO[1] - p.g) * lf) | 0,
+    (p.b + (MONO[2] - p.b) * lf) | 0,
+  ];
+}
+
+// 얼굴 입자: 응집할수록 명도 대비를 키운다. 모나리자의 이목구비는 저대비
+// sfumato라 그대로면 균일한 살색 덩어리로 뭉갠다 → 눈·코·입(미소) 그늘을
+// 어둡게, 광대·이마를 밝게 벌려 점의 명암 패턴만으로 얼굴이 해상되게 한다.
+function faceShade(p, coh) {
+  const c = shade(p);
+  if (coh < 0.02) return c; // 흩어진 상태는 원 거동 유지
+  const k = 1 + 0.95 * coh;                 // 대비 확장 계수 (1 → ~1.95)
+  const pivot = 150;                         // 살색 중간 명도 기준
+  const lum = 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2];
+  const lum2 = pivot + (lum - pivot) * k;    // 명도만 확장 (색조 보존)
+  const ratio = Math.max(0, lum2) / Math.max(1, lum);
+  return [
+    Math.min(255, c[0] * ratio) | 0,
+    Math.min(255, c[1] * ratio) | 0,
+    Math.min(255, c[2] * ratio) | 0,
+  ];
 }
 
 // ── 배경: 어두운 갈색 그라데이션 (#1a140c → #0a0806) ───────────────
