@@ -11,13 +11,18 @@ let field = null;
 let bg = null;                 // 오프스크린 배경 그라데이션
 let fog = 0;                   // 전역 안개 계수 (0 응집 ~ 1 흩어짐)
 let cx0 = 0, cy0 = 0;          // 입자 목표 바운딩 박스 중심
+let srcImg = null;             // 원작 이미지 (리빌 크로스페이드용 · 없으면 리빌 비활성)
+let reveal = 0;                // 안개 걷힘 계수 (0 안개 ~ 1 선명한 원작)
+let revealSmile = 0;           // 미소 밴드 전용 리빌 (main을 늦게 추종 → 미소가 마지막에 완성)
 
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height;
     reduced = !!opts.reducedMotion; T = 0; fog = 0;
+    reveal = 0; revealSmile = 0;
 
     const img = opts.assets && opts.assets.target ? opts.assets.target : null;
+    srcImg = img;              // 있으면 응집 시 원작이 서서히 드러난다
     const count = reduced ? 3200 : 6200;
     field = new ParticleField({
       image: img,
@@ -37,6 +42,9 @@ export default {
     if (ptr.inside && ptr.justDown) {
       // 클릭 = 안개 폭발: 전체를 방사형으로 밀치고 이후 spring으로 서서히 응결
       field.scatter(ptr.x, ptr.y, Math.min(W, H) * 0.95, reduced ? 130 : 260);
+      // 흩뜨리는 순간 원작은 즉시(수백 ms) 안개로 사라진다 — 재응집은 천천히
+      reveal *= reduced ? 0.45 : 0.12;
+      revealSmile *= reduced ? 0.45 : 0.12;
     } else if (ptr.inside && ptr.down) {
       // 드래그 = sfumato 휘젓기: 소용돌이 + 커서 주변 의사 컬 노이즈
       const sp = Math.hypot(ptr.dx, ptr.dy);
@@ -49,6 +57,7 @@ export default {
     applyBreathing();
     field.step(dt);
     updateFog(dt);
+    updateReveal(dt);
 
     // 3) 렌더
     render();
@@ -61,7 +70,7 @@ export default {
     tagParticles();
   },
 
-  dispose() { ctx = null; field = null; bg = null; },
+  dispose() { ctx = null; field = null; bg = null; srcImg = null; },
 };
 
 // ── 입자 태깅: 미소 영역 spring 감쇠 + 숨쉬기 기준점 ───────────────
@@ -125,13 +134,50 @@ function updateFog(dt) {
   fog += (target - fog) * Math.min(1, dt * 3);
 }
 
-// ── 렌더: 부드러운 연기 (헤일로 + 코어 2겹, 잔상 트레일) ───────────
+// ── 리빌: 응집(낮은 fog)이면 원작이 서서히 드러나고, 흩어지면 빠르게 사라진다 ─
+// 비대칭 이징 — 차오름은 느리게(2~4초), 사라짐은 빠르게(수백 ms). 미소는 가장 늦게.
+function updateReveal(dt) {
+  if (!srcImg) return; // 이미지 없으면 리빌 비활성 (절차적 폴백은 입자만)
+  // fog≤0.08 → 완전 선명(1), fog≥0.42 → 안개(0)
+  const coherence = Math.max(0, Math.min(1, (0.42 - fog) / 0.34));
+  const up = reduced ? 1.3 : 0.85;   // 느린 리빌 (τ≈1.2s → 3~4초에 선명)
+  const down = reduced ? 6 : 9;      // 빠른 소멸 (τ≈0.11s → 수백 ms)
+  reveal += (coherence - reveal) * Math.min(1, dt * (coherence > reveal ? up : down));
+  // 미소 밴드는 main 리빌을 더 느리게 추종 → 얼굴이 돌아올 때 미소가 마지막에 완성
+  const sUp = reduced ? 0.9 : 0.42, sDown = reduced ? 6 : 9;
+  revealSmile += (reveal - revealSmile) * Math.min(1, dt * (reveal > revealSmile ? sUp : sDown));
+}
+
+// ── 렌더: 부드러운 연기 (헤일로 + 코어 2겹, 잔상 트레일) + 원작 리빌 ─
 function render() {
   // 반투명 배경 재도포 → 연기 잔상
   ctx.globalAlpha = reduced ? 0.6 : 0.32;
   ctx.drawImage(bg, 0, 0, W, H);
   ctx.globalAlpha = 1;
 
+  // 리빌: 안개가 걷히면 실제 원작이 드러난다. 입자 필드와 동일한
+  // contain-fit 박스(field.fit)에 그려 입자·이미지가 정확히 겹친다.
+  if (srcImg && reveal > 0.003) {
+    const f = field.fit;
+    ctx.globalAlpha = reveal;
+    ctx.drawImage(srcImg, f.x, f.y, f.w, f.h);
+    ctx.globalAlpha = 1;
+    // 미소는 가장 늦게 — 남은 안개가 입가에 마지막까지 머문다 (부드러운 원형 베일)
+    const gap = reveal - revealSmile;
+    if (gap > 0.012) {
+      const mx = f.x + 0.45 * f.w, my = f.y + 0.31 * f.h; // 입 중심 (실측 u≈0.45, v≈0.31)
+      const mr = f.w * 0.22;
+      const veil = ctx.createRadialGradient(mx, my, 0, mx, my, mr);
+      veil.addColorStop(0, "rgba(26,20,12," + gap + ")");
+      veil.addColorStop(0.55, "rgba(26,20,12," + (gap * 0.6) + ")");
+      veil.addColorStop(1, "rgba(26,20,12,0)");
+      ctx.fillStyle = veil;
+      ctx.beginPath(); ctx.arc(mx, my, mr, 0, TAU); ctx.fill();
+    }
+  }
+
+  // 입자: 리빌이 차오를수록 옅어지되 완전히 사라지진 않는다 (안개 잔결)
+  const pfade = 1 - reveal * 0.82;
   const ps = field.particles;
   ctx.globalCompositeOperation = "lighter";
   for (const p of ps) {
@@ -141,12 +187,12 @@ function render() {
     const r = (p.r + (MONO[0] - p.r) * lf) | 0;
     const g = (p.g + (MONO[1] - p.g) * lf) | 0;
     const b = (p.b + (MONO[2] - p.b) * lf) | 0;
-    const s = p.size || 1.5;
+    const s = (p.size || 1.5) * (0.72 + 0.28 * pfade);
     // 헤일로: 큰 원 + 낮은 알파 → 안개
-    ctx.fillStyle = "rgba(" + r + "," + g + "," + b + ",0.06)";
+    ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + (0.06 * pfade) + ")";
     ctx.beginPath(); ctx.arc(p.x, p.y, s * 2.6, 0, TAU); ctx.fill();
     // 코어: 작은 원 → 형상의 심
-    ctx.fillStyle = "rgba(" + r + "," + g + "," + b + ",0.5)";
+    ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + (0.5 * pfade) + ")";
     ctx.beginPath(); ctx.arc(p.x, p.y, s * 0.8, 0, TAU); ctx.fill();
   }
   ctx.globalCompositeOperation = "source-over";

@@ -21,7 +21,10 @@ fetch() { # fetch <출력파일> <너비> <Commons 파일명>
 fetch 01-great-wave.jpg      256 "The_Great_Wave_off_Kanagawa.jpg"
 fetch 02-birth-of-venus.jpg  256 "Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg"
 fetch 03-pearl-earring.jpg   256 "1665_Girl_with_a_Pearl_Earring.jpg"
-fetch 04-mona-lisa.jpg       256 "Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg"
+# 04 모나리자: 응집 시 원작 크로스페이드 리빌용 고해상 필요 (입자 샘플링은 count 캡으로 무관).
+# 허용 버킷은 960px/517KB·1280px/980KB 두 개뿐 — 1280은 600KB 초과 → 960px 채택
+# (width=800~960 요청 모두 960px 버킷으로 스냅, 목표 800~1280px·600KB 이하 충족).
+fetch 04-mona-lisa.jpg       960 "Mona_Lisa,_by_Leonardo_da_Vinci,_from_C2RMF_retouched.jpg"
 # 화면 표시용 (등불 리빌·프레스코·판화 배경 — 고해상 필요)
 fetch 06-night-watch.jpg     1024 "The_Night_Watch_-_HD.jpg"
 fetch 09-creation-of-adam.jpg 1024 "Michelangelo_-_Creation_of_Adam_(cropped).jpg"
