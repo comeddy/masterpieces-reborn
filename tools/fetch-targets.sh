@@ -17,8 +17,12 @@ fetch() { # fetch <출력파일> <너비> <Commons 파일명>
   sleep 2  # Wikimedia 속도 제한 예방
 }
 
-# Ⅰ관 입자 샘플링용 (256px면 충분 — 입자 목표 좌표만 추출)
-fetch 01-great-wave.jpg      256 "The_Great_Wave_off_Kanagawa.jpg"
+# 01 파도: 전체화면(cover-fit) 점묘 — 원색(프러시안 블루·크림)과 밀도 차별화로
+# 파도 갈고리·후지산 형상을 세운다. 색 충실도가 형상을 좌우하므로 고해상 필요.
+# 허용 버킷은 960px/244KB·1280px/423KB 두 개뿐(640~960 요청→960 스냅, 1024~1280→1280).
+# 1280px/423KB가 목표(800~1280px·≤600KB)에 부합 → 채택. 실측 원색: 심해(21,30,62)
+# 남색, 중간 바다(70,91,119), 포말 크림-백(236,229,210~253,254,253), 하늘 크림(228,201,166).
+fetch 01-great-wave.jpg      1280 "The_Great_Wave_off_Kanagawa.jpg"
 fetch 02-birth-of-venus.jpg  256 "Sandro_Botticelli_-_La_nascita_di_Venere_-_Google_Art_Project_-_edited.jpg"
 fetch 03-pearl-earring.jpg   256 "1665_Girl_with_a_Pearl_Earring.jpg"
 # 04 모나리자: 응집 시 원작 크로스페이드 리빌용 고해상 필요 (입자 샘플링은 count 캡으로 무관).
