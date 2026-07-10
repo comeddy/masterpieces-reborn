@@ -4,7 +4,8 @@
 // 개별 위상으로 미세하게 들썩·기울여 "살아있는 군중"을 만든다.
 // 중앙 씨름꾼 쌍은 종이 인형극처럼 처리한다:
 //  · 원작 실루엣을 근사한 다각형으로 "오려낸" 종이 인형(가위 단면 흰 테두리 + 나무 막대 2개).
-//  · 배경에서 살짝 떠 있도록 부드러운 드롭 섀도 — 들리거나 흔들리면 그림자도 함께 변한다.
+//  · 배경에서 살짝 떠 있도록 인형 본체와 두 막대 모두 부드러운 드롭 섀도를 드리운다
+//    — 같은 우하 광원 방향, 들리거나 흔들리면 본체·막대 그림자가 일관되게 함께 변한다.
 //  · 유휴에도 두 막대 위에서 서로 밀고 당기듯 조금씩 계속 흔들린다(힘겨루기 리듬).
 //  · 클릭 = 들배지기 2단 모션(웅크림→들어올림→안착 바운스), 그림자가 커지고 흐려진다.
 //    동시에 클릭 지점에서 방사형 환호 파동이 퍼져 도달한 구경꾼의 들썩임이 일시 증폭.
@@ -145,8 +146,12 @@ function buildBase() {
 // 인형이 크게 들려 자리를 비워도 원작 씨름꾼(발 포함)의 흔적이 전혀 남지 않는다. (베이크 1회)
 function softPatchPuppet() {
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-  // 발끝(좌 신발 ~0.43·우 신발 ~0.74)·뻗은 다리(~0.74,0.46)·머리(~0.35)까지 전부 덮는 넉넉한 영역.
-  const u0 = 0.365, v0 = 0.285, u1 = 0.800, v1 = 0.800;
+  // 씨름꾼 실측 잉크 하한/우한까지 전부 덮는 넉넉한 영역:
+  //  · 머리 v~0.34, 좌 신발 u~0.42·v~0.70, 우 앞발 u~0.75·v~0.745.
+  //  · 들린 씨름꾼의 뻗은 다리·발끝은 인형 실루엣(poly maxu 0.687) 밖으로 u~0.81(v~0.46)까지
+  //    나가 잘려 나간다 → 우한을 0.850으로 넓혀 발끝을 불투명 코어로 완전히 덮는다(엿가위 u≥0.875·
+  //    누운 구경꾼 u≥0.86 은 건드리지 않음). 좌한은 구경꾼 다리·갓(u<0.365)을 지우지 않도록 유지.
+  const u0 = 0.365, v0 = 0.285, u1 = 0.850, v1 = 0.800;
   const dx = Math.round(fit.x + u0 * fit.w), dy = Math.round(fit.y + v0 * fit.h);
   const dw = Math.max(2, Math.round((u1 - u0) * fit.w));
   const dh = Math.max(2, Math.round((v1 - v0) * fit.h));
@@ -175,7 +180,8 @@ function softPatchPuppet() {
   paperGrain(pc, dw, dh, 3.1, 0.5);
 
   // 4) 전면 불투명 → 네 가장자리만 안쪽으로 페더(발끝까지 완전 커버, 이음새는 깨끗한 여백에서만 스밈)
-  const fw = Math.max(6, Math.round(Math.min(dw, dh) * 0.09));
+  //    페더 폭을 좁혀(0.06) 불투명 코어가 우한(발끝 u~0.81) 안쪽까지 닿게 한다 — 페이드 잔재 방지.
+  const fw = Math.max(6, Math.round(Math.min(dw, dh) * 0.06));
   pc.globalCompositeOperation = "destination-in";
   pc.fillStyle = "#000"; pc.fillRect(0, 0, dw, dh);
   pc.globalCompositeOperation = "destination-out";
@@ -447,6 +453,36 @@ function drawSticks() {
   }
 }
 
+// 막대 그림자 — 각 막대 형태를 따라 우하 오프셋의 부드러운 그림자 바(배경 위·막대 아래 레이어).
+// 인형 본체 그림자와 같은 광원 방향(우하)·저알파. 좌우 가장자리를 투명으로 페이드해 블러처럼 부드럽게.
+// 인형이 들리거나 흔들리면(rock·lift) 막대와 함께 움직이고, 오프셋도 본체 그림자와 같은 항으로 변한다.
+function drawStickShadows(rock, lift, L, rise) {
+  const p = puppet, w0 = Math.max(2.5, Math.min(W, H) * 0.011);
+  const bottomY = (H - p.pivotY) + 160;
+  const sdx = 12 + rock * 90 + L * 10;         // 우측 오프셋(본체 그림자와 동일 항, 기저 8~14px)
+  const sdy = 13 + rise * 0.30 + L * 28;       // 하단 오프셋(뜰수록 아래로)
+  ctx.save();
+  ctx.globalAlpha = (reduced ? 0.2 : 0.27) * Math.max(0, 1 - L * 0.24);
+  ctx.translate(p.pivotX, p.pivotY - lift);    // 막대와 같은 세로 위치(들리면 함께)
+  ctx.translate(sdx, sdy);                     // 본체 그림자와 일관된 우하 오프셋
+  ctx.rotate(rock);                            // 막대와 같은 기울임
+  for (const a of STICK_ANCHORS) {
+    const ax = (fit.x + a[0] * fit.w) - p.pivotX;
+    const ay = (fit.y + a[1] * fit.h) - p.pivotY;
+    const half = w0 * 1.1;                      // 막대보다 살짝 넓게(부드러운 penumbra)
+    const g = ctx.createLinearGradient(ax - half, 0, ax + half, 0);
+    g.addColorStop(0, "rgba(30,22,12,0)");
+    g.addColorStop(0.5, "rgba(30,22,12,1)");    // 중앙만 짙고 좌우로 투명 → 블러 느낌
+    g.addColorStop(1, "rgba(30,22,12,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(ax - half, ay); ctx.lineTo(ax + half, ay);
+    ctx.lineTo(ax + half * 0.84, bottomY); ctx.lineTo(ax - half * 0.84, bottomY);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+
 // 씨름꾼 종이 인형: 유휴 미세 흔들림(힘겨루기) + 들배지기 2단 모션 + 드롭 섀도.
 function drawPuppet() {
   if (!puppet) return;
@@ -478,6 +514,9 @@ function drawPuppet() {
   ctx.scale(shScale, shScale);
   ctx.drawImage(p.shadow, p.ox - p.pivotX, p.oy - p.pivotY, p.dw, p.dh);
   ctx.restore();
+
+  // ---- 막대 그림자(배경 위·막대 아래) — 본체 그림자와 같은 광원 방향으로 입체감 완성 ----
+  drawStickShadows(rock, lift, L, rise);
 
   // ---- 인형 본체(막대 위) ----
   ctx.save();
