@@ -79,7 +79,7 @@ let waves = [];                       // 방사형 환호 파동 {x,y,el,speed,m
 let pressMoved = false;               // 이번 누름이 드래그로 바뀌었는지
 let tech = -1;                        // 씨름꾼 기술 진행 시간(초). <0 = 비활성
 const TECH_DUR = 1.2;                 // 들배지기 지속(초) — 웅크림→들기→안착
-const PUP_PAD = 26;                   // 인형 타일 여백(가위 단면·그림자 여유, 소스 px)
+const PUP_PAD = 42;                   // 인형 타일 여백(가위 단면·그림자 블러 여유, 소스 px)
 
 function makeCanvas(w, h) {
   const c = document.createElement("canvas");
@@ -97,6 +97,25 @@ function polyBBox(p) {
 function polyCentroid(p) { let x = 0, y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; }
 // 결정적 지터(가위 단면의 미세하게 삐뚤한 절단선용) — 인덱스 기반 해시
 function jitter(i) { const t = Math.sin(i * 127.1 + 11.7) * 43758.5453; return (t - Math.floor(t)) - 0.5; }
+
+// 한지 결 노이즈(결정적) — 인페인트한 빈 바닥이 주변 종이 질감과 어우러지도록.
+// 64×64 노이즈 타일을 만들어 대상 캔버스에 반복해 얹는다(베이크 1회, 프레임 비용 0).
+function paperGrain(c, w, h, seed, alpha) {
+  const N = 64, g = makeCanvas(N, N), gg = g.getContext("2d");
+  const id = gg.createImageData(N, N);
+  for (let i = 0; i < N * N; i++) {
+    const n = jitter(i * 1.37 + seed);                 // -0.5..0.5
+    const v = Math.max(0, Math.min(255, 128 + n * 220));
+    id.data[i * 4] = id.data[i * 4 + 1] = id.data[i * 4 + 2] = v;
+    id.data[i * 4 + 3] = Math.min(255, Math.abs(n) * 2 * 255);   // 결이 있는 픽셀만 tint
+  }
+  gg.putImageData(id, 0, 0);
+  c.save();
+  c.globalAlpha = alpha;
+  try { c.globalCompositeOperation = "overlay"; } catch (e) {}
+  for (let y = 0; y < h; y += N) for (let x = 0; x < w; x += N) c.drawImage(g, x, y);
+  c.restore();
+}
 
 // 원작 종횡비를 화면에 contain-fit
 function computeFit() {
@@ -119,36 +138,57 @@ function buildBase() {
   else proceduralScene();
 }
 
-// 씨름꾼 인형이 차지한 자리의 원작 씨름꾼을 지운다(들배지기·흔들림으로 인형이 자리를
-// 비워도 배경에 또렷한 원작 씨름꾼이 비치지 않도록). 실루엣 다각형을 살짝 부풀린
-// 영역만 강하게 블러한 한지-평균색 패치로 덮는다. (베이크 1회 — 프레임 비용 0)
+// 씨름꾼 인형이 차지한 자리의 원작 씨름꾼을 "빈 모래바닥"으로 완전히 인페인트한다.
+// (블러 패치로는 발끝·뻗은 다리가 배경에 비쳐 보였다 → 사용자 피드백). 씨름꾼은 열린
+// 모래판 한가운데라 주변이 전부 빈 한지 — 머리~발끝을 넉넉히 덮는 사각 영역을 주변
+// 깨끗한 바닥 톤·질감·결 노이즈로 채우고, 가장자리만 부드럽게 페더해 이음새를 감춘다.
+// 인형이 크게 들려 자리를 비워도 원작 씨름꾼(발 포함)의 흔적이 전혀 남지 않는다. (베이크 1회)
 function softPatchPuppet() {
   const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
-  // 원작 씨름꾼의 발자국 전체(오려낸 실루엣 밖으로 뻗은 다리·발까지)를 덮는 넉넉한 영역.
-  // 씨름꾼은 열린 모래판 한가운데라 주변은 빈 한지 — 넓게 덮어도 다른 인물을 침범하지 않는다.
-  const u0 = 0.395, v0 = 0.320, u1 = 0.778, v1 = 0.800;
-  const sx = u0 * iw, sy = v0 * ih, sw = (u1 - u0) * iw, sh = (v1 - v0) * ih;
+  // 발끝(좌 신발 ~0.43·우 신발 ~0.74)·뻗은 다리(~0.74,0.46)·머리(~0.35)까지 전부 덮는 넉넉한 영역.
+  const u0 = 0.365, v0 = 0.285, u1 = 0.800, v1 = 0.800;
+  const dx = Math.round(fit.x + u0 * fit.w), dy = Math.round(fit.y + v0 * fit.h);
   const dw = Math.max(2, Math.round((u1 - u0) * fit.w));
   const dh = Math.max(2, Math.round((v1 - v0) * fit.h));
-  // 1/12 축소 → 확대 + 강한 블러로 색만 남긴다
-  const sm = makeCanvas(Math.max(1, Math.round(dw / 12)), Math.max(1, Math.round(dh / 12)));
-  sm.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, sm.width, sm.height);
   const patch = makeCanvas(dw, dh);
   const pc = patch.getContext("2d");
   pc.imageSmoothingEnabled = true;
-  try { pc.filter = "blur(" + Math.max(5, Math.round(Math.min(dw, dh) * 0.11)) + "px)"; } catch (e) {}
-  pc.drawImage(sm, 0, 0, sm.width, sm.height, 0, 0, dw, dh);
+
+  // 1) 주변 바닥 톤 세로 그라디언트(상단 밝음 → 하단 살짝 탁함) — 원작 여백에서 샘플한 값
+  const grad = pc.createLinearGradient(0, 0, 0, dh);
+  grad.addColorStop(0, "rgb(221,201,160)");
+  grad.addColorStop(1, "rgb(205,185,143)");
+  pc.fillStyle = grad; pc.fillRect(0, 0, dw, dh);
+
+  // 2) 원작의 깨끗한 바닥 픽셀(씨름꾼 오른쪽 빈 여백)을 크게 축소→확대·블러해 결만 얹는다.
+  //    축소로 잉크 자국을 지우고 색·얼룩의 큰 결만 남긴다.
+  const sx = 0.800 * iw, sy = 0.320 * ih, sw = 0.075 * iw, sh = 0.230 * ih;
+  const sm = makeCanvas(6, 8);
+  sm.getContext("2d").drawImage(img, sx, sy, sw, sh, 0, 0, sm.width, sm.height);
+  try { pc.filter = "blur(" + Math.max(6, Math.round(Math.min(dw, dh) * 0.09)) + "px)"; } catch (e) {}
+  pc.globalAlpha = 0.6;
+  pc.drawImage(sm, 0, 0, sm.width, sm.height, -dw * 0.06, -dh * 0.06, dw * 1.12, dh * 1.12);
+  pc.globalAlpha = 1;
   try { pc.filter = "none"; } catch (e) {}
-  // 타원 페이드 마스크(중심 불투명 → 가장자리 한지로 스밈) — 하드 엣지 없이 스며든다
+
+  // 3) 한지 결 노이즈
+  paperGrain(pc, dw, dh, 3.1, 0.5);
+
+  // 4) 전면 불투명 → 네 가장자리만 안쪽으로 페더(발끝까지 완전 커버, 이음새는 깨끗한 여백에서만 스밈)
+  const fw = Math.max(6, Math.round(Math.min(dw, dh) * 0.09));
   pc.globalCompositeOperation = "destination-in";
-  pc.translate(dw / 2, dh / 2); pc.scale(dw / 2, dh / 2);
-  const g = pc.createRadialGradient(0, 0, 0, 0, 0, 1);
-  g.addColorStop(0, "rgba(0,0,0,1)");
-  g.addColorStop(0.86, "rgba(0,0,0,1)");
-  g.addColorStop(1, "rgba(0,0,0,0)");
-  pc.fillStyle = g; pc.beginPath(); pc.arc(0, 0, 1, 0, 6.283); pc.fill();
+  pc.fillStyle = "#000"; pc.fillRect(0, 0, dw, dh);
+  pc.globalCompositeOperation = "destination-out";
+  const edge = (x0, y0, x1, y1) => {
+    const gg = pc.createLinearGradient(x0, y0, x1, y1);
+    gg.addColorStop(0, "rgba(0,0,0,1)"); gg.addColorStop(1, "rgba(0,0,0,0)");
+    pc.fillStyle = gg; pc.fillRect(0, 0, dw, dh);
+  };
+  edge(0, 0, fw, 0); edge(dw, 0, dw - fw, 0); edge(0, 0, 0, fw); edge(0, dh, 0, dh - fw);
+
   actx.setTransform(1, 0, 0, 1, 0, 0);
-  actx.drawImage(patch, Math.round(fit.x + u0 * fit.w), Math.round(fit.y + v0 * fit.h), dw, dh);
+  actx.globalCompositeOperation = "source-over";
+  actx.drawImage(patch, dx, dy, dw, dh);
 }
 
 // 인물 영역 소프트 패치(원작 위에만): 각 타원 영역의 크롭을 강하게 블러/확대한
@@ -354,11 +394,11 @@ function buildPuppet() {
   // 3) 안쪽 가장자리 접힘 그늘(입체감)
   c.strokeStyle = "rgba(58,46,30,0.26)"; c.lineWidth = Math.max(1, rim * 0.2); trace(c, inner); c.stroke();
 
-  // 그림자 타일(바깥 실루엣을 검게 + 블러)
+  // 그림자 타일(바깥 실루엣을 검게 + 넉넉한 블러로 부드러운 가장자리 — 배경에서 떠 보이게)
   const shadow = makeCanvas(tw, th);
   const sc = shadow.getContext("2d");
-  try { sc.filter = "blur(" + Math.max(3, Math.round(rim * 1.3)) + "px)"; } catch (e) {}
-  sc.fillStyle = "rgba(28,22,14,1)"; trace(sc, outer); sc.fill();
+  try { sc.filter = "blur(" + Math.max(6, Math.round(rim * 3.0)) + "px)"; } catch (e) {}
+  sc.fillStyle = "rgba(24,18,10,1)"; trace(sc, outer); sc.fill();
   try { sc.filter = "none"; } catch (e) {}
 
   puppet = { tile, shadow, bb, ph1: 0.4, ph2: 1.9,
@@ -422,11 +462,14 @@ function drawPuppet() {
   }
   const lift = up * p.dh * 0.34 - bob;          // 화면 px(위=음수 처리 아래에서)
   const L = Math.max(0, up);                    // 그림자 확대·흐림 기준
+  const rise = Math.max(0, lift);               // 실제로 떠오른 높이(유휴 미세 bob 포함)
 
-  // ---- 드롭 섀도(배경 위) — 유휴엔 살짝 떠 있고, 들릴수록 커지고 옅게 퍼진다 ----
-  const shScale = 1.03 + L * 0.14;              // 확대(업스케일 → 흐려짐)
-  const shAlpha = (reduced ? 0.16 : 0.26) * (1 - L * 0.32);
-  const shDX = rock * 80 + 9, shDY = 12 + L * 32;
+  // ---- 드롭 섀도(배경 위) — 유휴에도 뚜렷해 인형이 떠 보이고, 들릴수록 커지고 옅게 퍼진다.
+  //      우하 오프셋 + 부드러운 가장자리 + 높은 알파. 유휴 미세 흔들림에도 그림자가 살짝 따라 움직인다.
+  const shScale = 1.07 + rise / Math.max(1, p.dh) * 0.5 + L * 0.16;   // 뜰수록 커짐(업스케일 → 흐려짐)
+  const shAlpha = (reduced ? 0.25 : 0.33) * (1 - L * 0.24);           // 뚜렷하게, 높이 들리면 약간 옅게
+  const shDX = 14 + rock * 90 + L * 10;                               // 우측 오프셋(유휴 흔들림 반영)
+  const shDY = 16 + rise * 0.35 + L * 32;                             // 하단 오프셋(뜰수록 아래로 퍼짐)
   ctx.save();
   ctx.globalAlpha = Math.max(0, shAlpha);
   ctx.translate(p.pivotX, p.pivotY);
