@@ -8,6 +8,18 @@
 
 An interactive generative-art exhibition that reimagines 16 world masterpieces in code, built end-to-end with Claude (Fable 5) | 세계 걸작 명화 16점을 코드로 재해석한 인터랙티브 제너러티브 아트 전시 — Claude(Fable 5)와 함께 처음부터 끝까지 제작
 
+## Preview | 미리보기
+
+**Visit the live exhibition | 라이브 전시 관람하기: <https://d6czm97xwldpf.cloudfront.net/>**
+
+Every screen below is rendered live and responds to your cursor. | 아래 모든 화면은 실시간으로 그려지며 커서에 반응합니다.
+
+| ![After Hokusai — Great Wave](docs/images/preview-01-great-wave.jpg) | ![After Monet — Impression, Sunrise](docs/images/preview-05-sunrise.jpg) |
+|:---:|:---:|
+| **Wing I · After Hokusai — Great Wave** (가나가와 해변의 높은 파도)<br>Thousands of water particles gather into the wave and crash on their own<br>수천 개의 물 입자가 파도로 응집하고 스스로 부서집니다 | **Wing II · After Monet — Impression, Sunrise** (인상, 해돋이)<br>Click and the sun bursts with radiant beams<br>클릭하면 태양이 눈부신 광선을 사방으로 뻗습니다 |
+| ![Hommage à Picasso — Simultaneous Faces](docs/images/preview-12-picasso.jpg) | ![After Kim Hong-do — Ssireum](docs/images/preview-14-ssireum.jpg) |
+| **Wing III · Hommage à Picasso — Simultaneous Faces** (동시의 얼굴)<br>Every click reassembles an entirely new cubist portrait<br>클릭할 때마다 전혀 새로운 큐비즘 초상으로 재조립됩니다 | **Wing IV · After Kim Hong-do — Ssireum** (씨름)<br>The wrestlers take the stage as paper puppets on sticks<br>씨름꾼이 막대에 붙은 종이 인형이 되어 무대에 오릅니다 |
+
 ---
 
 <a id="english"></a>
