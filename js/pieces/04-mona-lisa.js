@@ -11,8 +11,10 @@ const MONO = [116, 98, 76];   // 안개 상태의 갈색-회갈색 모노톤
 // 얼굴 박스(원작 960×1431 자산 실측 · 이미지 정규화 u,v).
 // 눈·코·입을 감싸는 영역 — 여기에 입자를 몰아넣어 점만으로 이목구비를 해상한다.
 const FACE = { u0: 0.30, u1: 0.68, v0: 0.10, v1: 0.45 };
-// 미소 밴드(입 중심 u≈0.46, v≈0.33) — 복원이 가장 느려 미소가 마지막에 맺힌다.
-const SMILE = { u0: 0.37, u1: 0.55, v0: 0.30, v1: 0.365 };
+// 얼굴 타원(자산 실측 · 이마~턱·양 볼의 피부 형상 · u,v 정규화).
+// 이 영역은 복원 스프링을 낮춰(SPRING×0.4) 몸·배경·머리카락이 먼저 응집한 뒤
+// 얼굴 형상이 가장 늦게 또렷이 떠오르게 한다. 머리카락·목은 제외.
+const FACE_OVAL = { cu: 0.45, cv: 0.225, ru: 0.145, rv: 0.135 };
 
 let ctx = null, W = 0, H = 0, T = 0, reduced = false;
 let field = null;
@@ -93,6 +95,13 @@ function inFace(p) {
   return p.u >= FACE.u0 && p.u <= FACE.u1 && p.v >= FACE.v0 && p.v <= FACE.v1;
 }
 
+// 얼굴 타원 내부 판정 (정규화 타원 방정식) — 지연 복원 영역
+function inFaceOval(p) {
+  const a = (p.u - FACE_OVAL.cu) / FACE_OVAL.ru;
+  const b = (p.v - FACE_OVAL.cv) / FACE_OVAL.rv;
+  return a * a + b * b <= 1;
+}
+
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) {
     const j = (Math.random() * (i + 1)) | 0;
@@ -100,7 +109,7 @@ function shuffle(a) {
   }
 }
 
-// ── 입자 태깅: 얼굴/미소 판별 + 미소 spring 감쇠 + 숨쉬기 기준점 ───────
+// ── 입자 태깅: 얼굴(박스)·얼굴타원 판별 + 타원 spring 감쇠 + 숨쉬기 기준점 ──
 function tagParticles() {
   const ps = field.particles;
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -113,12 +122,13 @@ function tagParticles() {
   for (const p of ps) {
     p.bx = p.tx; p.by = p.ty;                 // 숨쉬기 기준 목표
     p.phase = Math.random() * TAU;            // 개별 위상
-    // 이미지 정규화 좌표(p.u,p.v)로 얼굴/미소 판별 — 점만으로 이목구비를 해상
+    // 이미지 정규화 좌표(p.u,p.v)로 얼굴(박스)·얼굴타원 판별
     p.isFace = inFace(p);
-    const smile = p.u >= SMILE.u0 && p.u <= SMILE.u1 && p.v >= SMILE.v0 && p.v <= SMILE.v1;
-    p.isSmile = smile;
-    // 미소 영역(입 주변)은 복원이 가장 느림 → 얼굴이 맺힐 때 미소가 마지막에 완성
-    p.spring = smile ? SPRING * 0.4 : SPRING;
+    // 얼굴 타원(피부 형상)은 복원이 가장 느림 → 몸·배경·머리카락이 먼저 응집하고
+    // 얼굴 형상이 마지막에 또렷이 떠오른다. 멱등: 매 호출마다 절대값으로 재할당.
+    const slowFace = inFaceOval(p);
+    p.isSlowFace = slowFace;
+    p.spring = slowFace ? SPRING * 0.4 : SPRING;
   }
 }
 
