@@ -93,7 +93,7 @@ function buildBg() {
   bgGrad.addColorStop(1.0, "#f5ecd9"); // 크림 바다거품
 }
 
-/* ---------- 장미 꽃잎 (연분홍 삼각형) ---------- */
+/* ---------- 장미 꽃잎 (곡선 실루엣 · 분홍 그라데이션) ---------- */
 function spawnBurst() {
   const n = 8 + (Math.random() * 5 | 0); // 8~12개
   const fromLeft = Math.random() < 0.5;
@@ -106,8 +106,9 @@ function spawnBurst() {
       vy: (Math.random() - 0.5) * 22,
       rot: Math.random() * TAU,
       vr: (Math.random() - 0.5) * 3.2,
-      size: 6 + Math.random() * 6,
+      size: 8 + Math.random() * 8,        // 꽃잎이 좀 더 크게 (형태가 보이도록)
       ph: Math.random() * TAU,
+      tone: Math.random(),                // 꽃잎마다 색조를 조금씩 다르게
     });
   }
 }
@@ -121,19 +122,42 @@ function updatePetals(dt, wind) {
     if (p.x < -160 || p.x > W + 160 || p.y > H + 80) petals.splice(i, 1);
   }
 }
+// 장미 꽃잎 실루엣 하나를 로컬 좌표(기부=아래, 끝=위)에 그린다.
+// 아래 뾰족한 기부에서 두 베지어가 볼록하게 올라가 끝이 살짝 갈라진(노치) 물방울/하트형.
+function petalPath(s) {
+  ctx.beginPath();
+  ctx.moveTo(0, s * 0.96);                                   // 기부(아래 뾰족)
+  ctx.bezierCurveTo(s * 0.58, s * 0.40, s * 0.66, -s * 0.52, // 오른쪽 볼록
+                    s * 0.20, -s * 0.94);                     // 오른쪽 끝
+  ctx.quadraticCurveTo(0, -s * 0.70, -s * 0.20, -s * 0.94);  // 끝 중앙 노치(갈라짐)
+  ctx.bezierCurveTo(-s * 0.66, -s * 0.52, -s * 0.58, s * 0.40, // 왼쪽 볼록
+                    0, s * 0.96);                             // 기부로 복귀
+  ctx.closePath();
+}
 function drawPetals() {
   for (let i = 0; i < petals.length; i++) {
     const p = petals[i];
+    const s = p.size;
+    const t = p.tone;
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.rot);
-    ctx.fillStyle = "rgba(244,182,196,0.92)"; // 연분홍
-    ctx.beginPath();
-    ctx.moveTo(0, -p.size);
-    ctx.lineTo(p.size * 0.7, p.size * 0.62);
-    ctx.lineTo(-p.size * 0.7, p.size * 0.62);
-    ctx.closePath();
+    // 가로축 스케일 진동 = 팔랑임/살짝 말린 느낌
+    ctx.scale(0.62 + 0.38 * Math.sin(p.ph * 1.3), 1);
+    // 2톤 그라데이션: 기부 진분홍 → 끝 연분홍 (꽃잎마다 tone으로 색조 편차)
+    const grad = ctx.createLinearGradient(0, s * 0.96, 0, -s * 0.94);
+    grad.addColorStop(0, "rgba(" + clamp(206 + t * 26 | 0) + "," + clamp(70 + t * 40 | 0) + "," + clamp(104 + t * 30 | 0) + ",0.96)");
+    grad.addColorStop(1, "rgba(" + clamp(247 + t * 6 | 0) + "," + clamp(196 + t * 18 | 0) + "," + clamp(208 + t * 12 | 0) + ",0.94)");
+    petalPath(s);
+    ctx.fillStyle = grad;
     ctx.fill();
+    // 중심선 음영 = 입체감(중앙 잎맥)
+    ctx.beginPath();
+    ctx.moveTo(0, s * 0.9);
+    ctx.quadraticCurveTo(s * 0.06, 0, 0, -s * 0.66);
+    ctx.strokeStyle = "rgba(180,58,92,0.22)";
+    ctx.lineWidth = Math.max(0.6, s * 0.07);
+    ctx.stroke();
     ctx.restore();
   }
 }
