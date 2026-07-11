@@ -9,6 +9,13 @@ const IGNITE_TIME = 0.8;  // 대형 아크 방전 지속
 const COOLDOWN_TIME = 3;  // 쿨다운
 const WARM_TIME = 1.5;    // 이미지가 따뜻하게 밝아지는 시간
 
+// ---- 소리 → 충전 세기 (순수, node:test 대상) ----
+export const SOUND_GATE = 0.1;  // 이하 무시(속삭임·잔류 소음)
+export const SOUND_FULL = 0.5;  // 이상 최대 충전 속도
+export function soundStrength(level) {
+  return Math.max(0, Math.min(1, (level - SOUND_GATE) / (SOUND_FULL - SOUND_GATE)));
+}
+
 // 두 손끝 좌표(이미지 기준 u,v). 좌: 아담 검지 끝(좌하 손), 우: 신 검지 끝(우 손)
 // 번들 이미지(1280×581 전체 프레스코)에서 실측한 두 손끝 — 화면 중앙 좌측에서 거의 맞닿는 지점
 const LEFT_UV = { u: 0.378, v: 0.456 };
@@ -18,6 +25,7 @@ let W = 0, H = 0, ctx = null, T = 0, reduced = false;
 let img = null, fresco = null, fit = { x: 0, y: 0, w: 0, h: 0 };
 let A = { x: 0, y: 0 }, B = { x: 0, y: 0 }; // 좌/우 손끝 스크린 좌표
 
+let mic = null, soundRate = 0; // 마이크 getter(없으면 null)와 이번 프레임 소리 세기
 let phase = "ready";      // ready | ignite | cooldown
 let charge = 0, igniteT = 0, cooldownT = 0, warmT = 99, warmth = 0;
 let tMin = 1, tMax = 0, awayT = 0; // 경로 주파(traverse) 추적
@@ -222,13 +230,12 @@ function updateState(dt, P) {
   near = false; let t = 0;
   if (P) { const r = projSeg(P.x, P.y); near = r.dist < NEAR; t = r.t; }
   if (phase === "ready") {
-    if (near) {
-      charge = Math.min(1, charge + dt / CHARGE_TIME);
-      tMin = Math.min(tMin, t); tMax = Math.max(tMax, t); awayT = 0;
-    } else {
-      charge = Math.max(0, charge - dt * 0.9);
-      awayT += dt; if (awayT > 0.4) { tMin = 1; tMax = 0; }
-    }
+    soundRate = mic && mic.active() ? soundStrength(mic.level()) : 0;
+    const rate = Math.max(near ? 1 : 0, soundRate); // 커서·소리 중 큰 쪽
+    if (rate > 0) charge = Math.min(1, charge + (dt / CHARGE_TIME) * rate);
+    else charge = Math.max(0, charge - dt * 0.9);
+    if (near) { tMin = Math.min(tMin, t); tMax = Math.max(tMax, t); awayT = 0; }
+    else { awayT += dt; if (awayT > 0.4) { tMin = 1; tMax = 0; } }
     if (charge >= 1 || (near && tMin < 0.12 && tMax > 0.88)) ignite();
     idleTimer -= dt; if (idleFlash > 0) idleFlash -= dt;
     if (idleTimer <= 0) { idleFlash = 0.1 + Math.random() * 0.12; idleTimer = 2 + Math.random() * 3; }
@@ -253,6 +260,8 @@ export default {
     ctx = opts.ctx; W = opts.width; H = opts.height;
     reduced = !!opts.reducedMotion;
     img = (opts.assets && opts.assets.target) || null;
+    mic = (opts.audio && opts.audio.mic) || null;
+    soundRate = 0;
     T = 0; phase = "ready"; charge = 0; igniteT = 0; cooldownT = 0; warmT = 99; warmth = 0;
     tMin = 1; tMax = 0; awayT = 0; near = false;
     idleTimer = 2 + Math.random() * 3; idleFlash = 0; gold = []; fresco = null;
@@ -277,6 +286,9 @@ export default {
     // 효과 렌더
     if (phase === "ready") {
       if (P && near && charge > 0.01) drawChargeSparks(P);
+      else if (soundRate > 0 && charge > 0.01)
+        drawChargeSparks({ x: (A.x + B.x) / 2 + Math.sin(T * 7) * 6,
+                           y: (A.y + B.y) / 2 + Math.cos(T * 9) * 6 }); // 간극 중점이 숨결에 흔들리듯
       else if (idleFlash > 0) // 유휴 미세 정전기
         drawBolt(A.x, A.y, B.x, B.y, reduced ? 2 : 5, 0.8,
           `rgba(170,190,255,${Math.min(0.45, idleFlash * 3)})`, "rgba(120,170,255,0.7)", 6);
@@ -289,5 +301,5 @@ export default {
 
   resize(w, h) { W = w; H = h; fresco = null; computeTips(); },
 
-  dispose() { ctx = null; img = null; fresco = null; gold = []; },
+  dispose() { ctx = null; img = null; fresco = null; gold = []; mic = null; },
 };
