@@ -23,10 +23,13 @@ function resetMicBtn() {
   micBtn.disabled = false;
   micBtn.textContent = MIC_LABEL;
 }
+let micReqSeq = 0; // 대기 중인 권한 요청의 늦은 완료 무효화용
 micBtn.addEventListener("click", async () => {
   if (mic.active()) { mic.stop(); resetMicBtn(); return; } // 토글 오프
+  const my = ++micReqSeq;
   micBtn.disabled = true;
   const ok = await mic.request();
+  if (my !== micReqSeq) return; // 대기 중 뷰어가 닫힘/전환됨 — mic.js가 트랙 정리함, UI는 건드리지 않음
   micBtn.disabled = false;
   if (ok) {
     micBtn.setAttribute("aria-pressed", "true");
@@ -189,6 +192,7 @@ async function closeWork() {
   rafId = 0;
   if (piece) { try { piece.dispose(); } catch (e) { console.error(e); } }
   piece = null;
+  micReqSeq++; // 대기 중인 마이크 권한 요청의 늦은 완료를 무효화
   mic.stop(); resetMicBtn(); micBtn.hidden = true;
   current = -1;
   body.dataset.view = "atrium";

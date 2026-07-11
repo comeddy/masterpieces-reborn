@@ -23,6 +23,7 @@ export function normalizeLevel(rms, dt, s) {
 // ---- 서비스부 (브라우저 전용 — import 시점엔 브라우저 API 미참조) ----
 let actx = null, analyser = null, stream = null, buf = null;
 let state = makeLevelState(), lastT = 0;
+let gen = 0; // stop()·재요청마다 증가 — 대기 중 request()의 늦은 완료 무효화
 
 export function active() { return !!stream; }
 
@@ -31,23 +32,29 @@ export async function request() {
     if (actx && actx.state === "suspended") await actx.resume();
     return true;
   }
+  const my = ++gen;                           // 동시 중복 요청도 이전 것을 무효화
+  let s = null, ac = null;
   try {
     // 숨소리("후—")가 지워지지 않도록 브라우저 잡음 억제를 끈다
-    const s = await navigator.mediaDevices.getUserMedia({
+    s = await navigator.mediaDevices.getUserMedia({
       audio: { noiseSuppression: false, echoCancellation: false },
     });
-    actx = new (window.AudioContext || window.webkitAudioContext)();
-    if (actx.state === "suspended") await actx.resume();
-    analyser = actx.createAnalyser();
-    analyser.fftSize = 1024;
-    buf = new Float32Array(analyser.fftSize);
-    actx.createMediaStreamSource(s).connect(analyser);
-    stream = s;
+    if (my !== gen) throw new Error("stale"); // 대기 중 stop()/재요청됨 — 폐기
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    if (ac.state === "suspended") await ac.resume();
+    if (my !== gen) throw new Error("stale");
+    const an = ac.createAnalyser();
+    an.fftSize = 1024;
+    buf = new Float32Array(an.fftSize);
+    ac.createMediaStreamSource(s).connect(an);
+    actx = ac; analyser = an; stream = s;
     state = makeLevelState();
     lastT = performance.now();
     return true;
   } catch (e) {
-    console.warn("마이크 사용 불가", e);
+    if (s) for (const t of s.getTracks()) t.stop(); // 늦은 완료·중간 실패 시 트랙 정리
+    if (ac) ac.close().catch(() => {});
+    if (e.message !== "stale") console.warn("마이크 사용 불가", e);
     return false;
   }
 }
@@ -65,6 +72,7 @@ export function level() {
 }
 
 export function stop() {
+  gen++; // 대기 중인 request()의 늦은 완료를 무효화
   if (stream) for (const t of stream.getTracks()) t.stop(); // 마이크 표시등 끄기
   stream = null; analyser = null; buf = null;
   if (actx) { actx.close().catch(() => {}); actx = null; }
