@@ -1,6 +1,6 @@
 # Masterpieces Reborn
 
-[![Live Demo](https://img.shields.io/badge/Live-Demo-orange.svg)](https://d6czm97xwldpf.cloudfront.net/)
+[![Live Demo](https://img.shields.io/badge/Live-Demo-orange.svg)](https://reborn.zerojin.art/)
 [![Works](https://img.shields.io/badge/Works-16-green.svg)]()
 [![Made with Claude](https://img.shields.io/badge/Made%20with-Claude%20Fable%205-8A2BE2.svg)](https://claude.com/claude-code)
 <a href="#english"><img src="https://img.shields.io/badge/lang-English-blue.svg" alt="English"></a>
@@ -10,7 +10,7 @@ An interactive generative-art exhibition that reimagines 16 world masterpieces i
 
 ## Preview | 미리보기
 
-**Visit the live exhibition | 라이브 전시 관람하기: <https://d6czm97xwldpf.cloudfront.net/>**
+**Visit the live exhibition | 라이브 전시 관람하기: <https://reborn.zerojin.art/>**
 
 Every screen below is rendered live and responds to your cursor. | 아래 모든 화면은 실시간으로 그려지며 커서에 반응합니다.
 
@@ -28,7 +28,7 @@ Every screen below is rendered live and responds to your cursor. | 아래 모든
 
 ## Overview
 
-Masterpieces Reborn is a zero-build web exhibition in which 16 public-domain masterpieces — from Hokusai's Great Wave to An Gyeon's Dream Journey — are reinterpreted as real-time interactive generative art. Every frame is rendered live on a Canvas 2D surface: particles gather into the Great Wave and crash under your cursor, ink bleeds into hanji paper on Jeong Seon's Inwangjesaekdo, and Kim Hong-do's wrestlers become paper puppets on sticks. Visit the live exhibition at https://d6czm97xwldpf.cloudfront.net/.
+Masterpieces Reborn is a zero-build web exhibition in which 16 public-domain masterpieces — from Hokusai's Great Wave to An Gyeon's Dream Journey — are reinterpreted as real-time interactive generative art. Every frame is rendered live on a Canvas 2D surface: particles gather into the Great Wave and crash under your cursor, ink bleeds into hanji paper on Jeong Seon's Inwangjesaekdo, and Kim Hong-do's wrestlers become paper puppets on sticks. Visit the live exhibition at https://reborn.zerojin.art/.
 
 The entire site — curation, specification, 16 artwork modules, tests, quality gates, and deployment — was produced in conversation with Claude (Fable 5) using a subagent-driven development process. The full story is in [How It Was Made](#how-it-was-made).
 
@@ -180,7 +180,7 @@ node --test test/
 
 ## 개요
 
-Masterpieces Reborn은 호쿠사이의 파도에서 안견의 몽유도원도까지, 퍼블릭 도메인 걸작 16점을 실시간 인터랙티브 제너러티브 아트로 재해석한 제로-빌드 웹 전시입니다. 모든 화면은 Canvas 2D 위에서 매 프레임 실시간으로 그려집니다. 입자들이 파도로 응집했다가 커서에 부서지고, 인왕제색도의 화선지에는 먹이 번지며, 김홍도의 씨름꾼은 막대에 붙은 종이 인형이 되어 무대에 오릅니다. 라이브 전시는 https://d6czm97xwldpf.cloudfront.net/ 에서 관람합니다.
+Masterpieces Reborn은 호쿠사이의 파도에서 안견의 몽유도원도까지, 퍼블릭 도메인 걸작 16점을 실시간 인터랙티브 제너러티브 아트로 재해석한 제로-빌드 웹 전시입니다. 모든 화면은 Canvas 2D 위에서 매 프레임 실시간으로 그려집니다. 입자들이 파도로 응집했다가 커서에 부서지고, 인왕제색도의 화선지에는 먹이 번지며, 김홍도의 씨름꾼은 막대에 붙은 종이 인형이 되어 무대에 오릅니다. 라이브 전시는 https://reborn.zerojin.art/ 에서 관람합니다.
 
 큐레이션, 설계 스펙, 16개 작품 모듈, 테스트, 품질 게이트, 배포까지 사이트 전체를 Claude(Fable 5)와의 대화로 제작했습니다. 전체 과정은 [제작 과정](#제작-과정)에 정리되어 있습니다.
 
