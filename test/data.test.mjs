@@ -37,3 +37,10 @@ test("관별 작품 수는 4점씩이다", () => {
     assert.equal(WORKS.filter(w => w.wing === wing.id).length, 4, wing.id);
   }
 });
+
+test("mic 플래그는 boolean이며 현재는 09번에만 있다", () => {
+  for (const w of WORKS) {
+    if ("mic" in w) assert.equal(typeof w.mic, "boolean", `${w.no}.mic 타입`);
+  }
+  assert.deepEqual(WORKS.filter(w => w.mic).map(w => w.no), ["09"]);
+});

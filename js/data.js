@@ -72,7 +72,8 @@ export const WORKS = [
     no: "09", wing: "dream", title: "After Michelangelo — Creation of Adam", ko: "아담의 창조",
     medium: "Spark of life · after Michelangelo (c.1512, public domain)", year: "2026",
     note: "시스티나 천장화에서 가장 유명한 순간 — 닿을 듯 닿지 않는 두 손끝의 간극. 커서를 그 사이에 가져가면 정전기가 일고, 간극을 이어주면 생명의 불꽃이 방전된다. 신이 아담에게 건넨 그 순간을, 당신의 손으로.",
-    hint: "두 손끝 사이에 커서를 · 간극을 이으면 불꽃이 튑니다",
+    hint: "🎤를 켜고 소리로 생명을 불어넣으세요 · 커서로도 가능합니다",
+    mic: true,
     module: "./pieces/09-creation-of-adam.js", asset: "assets/targets/09-creation-of-adam.jpg",
   },
   {

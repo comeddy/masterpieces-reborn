@@ -1,5 +1,6 @@
 // js/main.js — 전시 셸: 아트리움 렌더, 뷰어, rAF 루프, 포인터 규약
 import { WINGS, WORKS, wingOf } from "./data.js";
+import * as mic from "./mic.js";
 
 const $ = (sel) => document.querySelector(sel);
 const body = document.body;
@@ -12,6 +13,31 @@ let lastCard = null;   // 뷰어 진입 직전의 카드 (닫을 때 포커스 �
 $(".sound-toggle").addEventListener("click", (e) => {
   soundOn = !soundOn;
   e.currentTarget.setAttribute("aria-pressed", String(soundOn));
+});
+
+// ---------- 마이크 (mic: true 작품에서만 버튼 노출) ----------
+const micBtn = $("#v-mic");
+const MIC_LABEL = "🎤 소리로 생명 불어넣기";
+function resetMicBtn() {
+  micBtn.setAttribute("aria-pressed", "false");
+  micBtn.disabled = false;
+  micBtn.textContent = MIC_LABEL;
+}
+let micReqSeq = 0; // 대기 중인 권한 요청의 늦은 완료 무효화용
+micBtn.addEventListener("click", async () => {
+  if (mic.active()) { mic.stop(); resetMicBtn(); return; } // 토글 오프
+  const my = ++micReqSeq;
+  micBtn.disabled = true;
+  const ok = await mic.request();
+  if (my !== micReqSeq) return; // 대기 중 뷰어가 닫힘/전환됨 — mic.js가 트랙 정리함, UI는 건드리지 않음
+  micBtn.disabled = false;
+  if (ok) {
+    micBtn.setAttribute("aria-pressed", "true");
+    micBtn.textContent = "🎤 듣는 중 — 소리를 내보세요";
+  } else {
+    micBtn.disabled = true; // 권한 거부/미지원: 커서 폴백 안내
+    micBtn.textContent = "마이크를 사용할 수 없어요 — 커서로 체험하세요";
+  }
 });
 
 // ---------- 아트리움 렌더 ----------
@@ -124,6 +150,7 @@ async function openWork(idx) {
   $("#v-medium").textContent = work.medium;
   $("#v-note").textContent = work.note;
   $("#v-hint").textContent = work.hint;
+  micBtn.hidden = !work.mic;
   $("#v-error").hidden = true;
 
   const { w, h } = sizeCanvas();
@@ -133,7 +160,8 @@ async function openWork(idx) {
     piece = mod.default;
     piece.init({ canvas, ctx, width: w, height: h,
                  assets: { target }, reducedMotion,
-                 audio: { enabled: () => soundOn } });
+                 audio: { enabled: () => soundOn,
+                          mic: { active: () => mic.active(), level: () => mic.level() } } });
     lastT = performance.now();
     pointer.downTime = 0;
     rafId = requestAnimationFrame(frame);
@@ -164,6 +192,8 @@ async function closeWork() {
   rafId = 0;
   if (piece) { try { piece.dispose(); } catch (e) { console.error(e); } }
   piece = null;
+  micReqSeq++; // 대기 중인 마이크 권한 요청의 늦은 완료를 무효화
+  mic.stop(); resetMicBtn(); micBtn.hidden = true;
   current = -1;
   body.dataset.view = "atrium";
   $("#viewer").setAttribute("aria-hidden", "true");
