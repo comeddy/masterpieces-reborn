@@ -10,14 +10,24 @@ const RK = TWO_PI / 40;     // 리플 파장 → 위상 계수
 const N_BANDS = 16;         // 바다 가로 붓질 밴드 수
 const MAX_RIPPLES = 20;
 
-let W = 0, H = 0, ctx = null, T = 0, reduced = false, mo = 1;
+const SUN_CORE = [255, 210, 63]; // 태양 코어색 — drawSun과 배 팔레트의 단일 원천
+const shade = ([r, g, b], kr, kg, kb) =>
+  [Math.round(r * kr), Math.round(g * kg), Math.round(b * kb)];
+const BOAT_TOP = shade(SUN_CORE, 0.91, 0.77, 1.17);   // ≈ #e8a24a
+const BOAT_BOT = shade(SUN_CORE, 0.725, 0.53, 0.84);  // ≈ #b96f35
+const BOAT_GUN = shade(SUN_CORE, 0.98, 0.86, 1.45);   // 뱃전 약간 밝게
+const SEA_HAZE = [124, 132, 138]; // drawSea 수평선 그라디언트 #7c848a와 동일 톤
+const mix = (c1, c2, t) => c1.map((v, i) => Math.round(v + (c2[i] - v) * t));
+const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+
+let W = 0, H = 0, ctx = null, T = 0, reduced = false, mo = 1, wmo = 1;
 let horizonY = 0, seaH = 0;
 let sunX = 0, sunY = 0, sunR = 0, sunFlash = 0;
 
 let bands = [];        // {f, amp, wl, spd, ph, r,g,b} — f: 수평선(0)~전경(1)
 let fog = [];          // {x, y, r, vx, drift, ph, a} — 느리게 흐르는 안개 블롭
 let refl = [];         // {t, x, w, ph, base} — 태양 아래 부서진 반사 조각
-let boats = [];        // {x, y, s, bp, bs, amp} — 검은 조각배 실루엣
+let boats = [];        // {x, y, s, a, band, top, bot, gun} — 태양색 파생 조각배 실루엣
 const ripples = [];    // {x, y, t, strength} — 드래그/클릭 파원
 const bursts = [];     // {t, dur, maxLen, rays[]} — 클릭 시 태양 중심에서 뻗는 방사형 광선
 const gulls = [];      // {x, y, vx, ph} — 이따금 지나가는 갈매기 점
@@ -68,9 +78,19 @@ function build() {
   }
 
   boats = [
-    { x: W * 0.52, y: horizonY + seaH * 0.14, s: Math.max(10, W * 0.022), bp: 0.4, bs: 0.9, amp: seaH * 0.012 },
-    { x: W * 0.66, y: horizonY + seaH * 0.07, s: Math.max(6, W * 0.013), bp: 2.1, bs: 1.1, amp: seaH * 0.008 },
+    { x: sunX - W * 0.05, y: horizonY + seaH * 0.16, s: Math.max(10, W * 0.022), haze: 0,    a: 1 },
+    { x: sunX + W * 0.07, y: horizonY + seaH * 0.09, s: Math.max(6,  W * 0.013), haze: 0,    a: 1 },
+    { x: W * 0.60,        y: horizonY + seaH * 0.02, s: Math.max(4,  W * 0.008), haze: 0.45, a: 0.55 },
   ];
+  for (const b of boats) {
+    // 자기 깊이 f=(y−horizonY)/seaH에 최근접한 밴드 바인딩.
+    // 밴드 f는 i/(N_BANDS−1) 등간격이므로 최근접 인덱스는 round(f·(N_BANDS−1)).
+    const bf = (b.y - horizonY) / seaH;
+    b.band = bands[Math.max(0, Math.min(N_BANDS - 1, Math.round(bf * (N_BANDS - 1))))];
+    b.top = rgba(mix(BOAT_TOP, SEA_HAZE, b.haze), b.a);
+    b.bot = rgba(mix(BOAT_BOT, SEA_HAZE, b.haze), b.a);
+    b.gun = rgba(mix(BOAT_GUN, SEA_HAZE, b.haze), b.a);
+  }
 }
 
 // 모든 리플의 감쇠 사인 기여 합 — 링은 시간에 따라 확장하며 사그라짐
@@ -86,6 +106,13 @@ function rippleField(px, py) {
     sum += env * Math.cos(off * RK);
   }
   return sum;
+}
+
+// 밴드 bd 위 x 지점의 파고 — drawSea의 밴드 수식과 동일(사인 일렁임 + 리플).
+// drawSea와 drawBoats가 공유해 배가 파도·리플과 정확히 같은 위상으로 움직인다.
+function waveAt(x, bd) {
+  const by = horizonY + bd.f * seaH;
+  return Math.sin(x * bd.wl + T * bd.spd + bd.ph) * bd.amp * wmo + rippleField(x, by);
 }
 
 function addRipple(x, y, s) {
@@ -148,15 +175,13 @@ function drawSea() {
   ctx.fillRect(0, horizonY, W, seaH);
 
   const S = 16;
-  const wmo = reduced ? 0.7 : 1;
   const thick = seaH / N_BANDS * 1.9;
   for (const bd of bands) {
     const by = horizonY + bd.f * seaH;
     ctx.beginPath();
     ctx.moveTo(0, by);
     for (let x = 0; x <= W; x += S) {
-      const wave = Math.sin(x * bd.wl + T * bd.spd + bd.ph) * bd.amp * wmo;
-      ctx.lineTo(x, by + wave + rippleField(x, by));  // 사인 일렁임 + 리플
+      ctx.lineTo(x, by + waveAt(x, bd));  // 사인 일렁임 + 리플
     }
     ctx.lineTo(W, by + thick);
     ctx.lineTo(0, by + thick);
@@ -179,9 +204,9 @@ function drawSun() {
   ctx.fillRect(sunX - glowR, sunY - glowR, glowR * 2, glowR * 2);
   ctx.globalCompositeOperation = "source-over";
   // 코어: 평상시 밝은 노랑 → 섬광 시 흰빛으로
-  const cg = Math.round(210 + fl * 45);                         // 210 → 255
-  const cb = Math.round(63 + fl * 185);                         // 63 → 248 (흰빛)
-  ctx.fillStyle = `rgb(255,${cg},${cb})`;
+  const cg = Math.round(SUN_CORE[1] + fl * (255 - SUN_CORE[1]));  // 210 → 255
+  const cb = Math.round(SUN_CORE[2] + fl * (248 - SUN_CORE[2]));  // 63 → 248 (흰빛)
+  ctx.fillStyle = `rgb(${SUN_CORE[0]},${cg},${cb})`;
   ctx.beginPath();
   ctx.arc(sunX, sunY, r, 0, TWO_PI);
   ctx.fill();
@@ -239,19 +264,25 @@ function drawReflections() {
 
 function drawBoats() {
   for (const b of boats) {
-    const yo = Math.sin(T * b.bs + b.bp) * b.amp * mo; // 느린 보빙
+    const yo = waveAt(b.x, b.band);                     // 파도·리플과 같은 위상의 승강
+    const tilt = Math.atan2(
+      waveAt(b.x + b.s, b.band) - waveAt(b.x - b.s, b.band), 2 * b.s); // 파도 경사면 타기
     ctx.save();
     ctx.translate(b.x, b.y + yo);
-    ctx.rotate(Math.sin(T * b.bs + b.bp) * 0.05 * mo);
-    ctx.fillStyle = "#0b1216";
+    ctx.rotate(tilt);
     const s = b.s;
+    const g = ctx.createLinearGradient(0, -s * 0.85, 0, s * 0.55);
+    g.addColorStop(0, b.top);
+    g.addColorStop(1, b.bot);
+    ctx.fillStyle = g;
     ctx.beginPath();
     ctx.moveTo(-s, 0);
-    ctx.quadraticCurveTo(0, s * 0.55, s, 0);           // 초승달 선체
+    ctx.quadraticCurveTo(0, s * 0.55, s, 0);            // 초승달 선체
     ctx.closePath();
     ctx.fill();
-    ctx.fillRect(-1, -s * 0.85, 2.5, s * 0.85);        // 서 있는 노잡이
-    ctx.fillRect(-s * 0.7, -1.5, s * 1.4, 2);          // 뱃전
+    ctx.fillRect(-1, -s * 0.85, 2.5, s * 0.85);         // 서 있는 노잡이
+    ctx.fillStyle = b.gun;
+    ctx.fillRect(-s * 0.7, -1.5, s * 1.4, 2);           // 뱃전 — 약간 밝게
     ctx.restore();
   }
 }
@@ -288,7 +319,7 @@ function drawGulls() {
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height;
-    reduced = !!opts.reducedMotion; mo = reduced ? 0.5 : 1;
+    reduced = !!opts.reducedMotion; mo = reduced ? 0.5 : 1; wmo = reduced ? 0.7 : 1;
     T = 0; sunFlash = 0; dragAccum = 0; gullTimer = 3;
     ripples.length = 0; bursts.length = 0; gulls.length = 0;
     build();
