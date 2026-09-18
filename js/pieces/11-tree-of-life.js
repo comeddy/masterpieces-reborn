@@ -276,7 +276,11 @@ export default {
     let pt = null;
     if (cam && cam.active()) {                                      // hands()는 tick당 정확히 1회(프레임당 1회 탐지 계약)
       const h = cam.hands();
-      if (h && h.n >= 1) pt = { x: h.x, y: h.y };
+      // 공용 서비스가 비정상 값을 주면 NaN이 바람 스프링을 영구 오염 — 유한값만 수용
+      if (h && h.n >= 1 && Number.isFinite(h.x) && Number.isFinite(h.y)) pt = { x: h.x, y: h.y };
+    } else if (handOn) {
+      // 📷 끔/스트림 종료: 검출 드랍과 달리 즉시 손 상태를 지운다
+      track = makeHandTrack(); handOn = false; hx = hy = null; handAcc = 0;
     }
     handTrackStep(track, pt, dt);
     if (track.present) {

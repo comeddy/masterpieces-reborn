@@ -61,6 +61,16 @@ test("부재 후 먼 위치 재등장: 첫 프레임에 위치가 즉시 놓이�
   assert.equal(s.vx, 0); assert.equal(s.vy, 0);
 });
 
+test("dt가 0 이하이면 상태를 바꾸지 않는다", () => {
+  const s = makeHandTrack();
+  feed(() => handTrackStep(s, { x: 0.3, y: 0.4 }, F), 0.5);
+  const snap = { ...s };
+  handTrackStep(s, { x: 0.9, y: 0.9 }, 0);
+  assert.deepEqual(s, snap, "dt=0");
+  handTrackStep(s, { x: 0.9, y: 0.9 }, -1 / 60);
+  assert.deepEqual(s, snap, "dt=-1/60");
+});
+
 // ── 스텁 ctx 스모크: 브라우저 없는 node에서 렌더 코드까지 실행한다 ──
 // 모든 프로퍼티 읽기·호출·대입을 흡수하는 Proxy — document.createElement("canvas").getContext("2d") 등 전부 stub
 const stub = new Proxy(function () {}, {
@@ -72,8 +82,8 @@ test("가짜 cam으로 init→tick→dispose가 예외 없이 돌고 hands()는 
   globalThis.document = stub;
   try {
     const piece = (await import("../js/pieces/11-tree-of-life.js")).default;
-    let calls = 0, hand = { n: 0, x: 0.5, y: 0.5 };
-    const cam = { active: () => true, hands: () => { calls++; return hand; }, video: () => null, landmarks: () => [] };
+    let calls = 0, hand = { n: 0, x: 0.5, y: 0.5 }, camActive = true;
+    const cam = { active: () => camActive, hands: () => { calls++; return hand; }, video: () => null, landmarks: () => [] };
     piece.init({ canvas: stub, ctx: stub, width: 1280, height: 720, reducedMotion: false, audio: null, assets: {}, cam });
     const ptr = { x: 640, y: 300, px: 640, py: 300, dx: 0, dy: 0, down: false, justDown: false, justUp: false, downTime: 0, inside: true };
     for (let i = 0; i < 60; i++) piece.tick(1 / 60, ptr);        // 손 없음 1초 — 마우스 경로
@@ -83,7 +93,10 @@ test("가짜 cam으로 init→tick→dispose가 예외 없이 돌고 hands()는 
     hand = { n: 0, x: 0.3, y: 0.35 };
     for (let i = 0; i < 60; i++) piece.tick(1 / 60, null);       // 손 사라짐, ptr null도 허용
     piece.resize(800, 600); piece.tick(1 / 60, ptr);
+    camActive = false;
+    hand = { n: 1, x: 0.3, y: 0.35 };                            // 손이 있는 것처럼 보여도 비활성이면 hands()가 불리지 않아야 한다
+    for (let i = 0; i < 30; i++) piece.tick(1 / 60, ptr);        // 카메라 꺼짐 30틱 — Minor 3 리셋 경로도 예외 없이 통과
     piece.dispose();
-    assert.equal(calls, 271, "hands() 호출 수 = tick 수");
+    assert.equal(calls, 271, "hands() 호출 수 = 활성 상태였던 tick 수(비활성 30틱 동안은 호출되지 않음)");
   } finally { delete globalThis.document; }
 });
