@@ -348,6 +348,85 @@ Expected: `status` 출력 없음(다른 세션의 미커밋 변경 없음) 후 f
 
 ---
 
+### Task 3b: cam.js — 프레임 정지(트랙 종료·뮤트) 시 결과 노후화 방지 (cam-contract)
+
+01번 세션 리뷰 지적: `detect()`는 `vid.currentTime`이 전진할 때만 재검출하므로, OS 프라이버시 스위치·다른 앱의 카메라 점유로 트랙이 끝나거나 뮤트되면 `lmarks`가 마지막 검출값으로 영원히 남아 소비자가 손 소실을 감지할 수 없다.
+
+**Files:**
+- Modify: `js/cam.js` (`detect()` 안, 모듈 상태 1개 추가, 순수 헬퍼 1개 export)
+- Modify: `test/cam.test.mjs` (append)
+
+**Interfaces:**
+- Produces: `export const STALE_MS = 500;` `export function isStale(nowMs, lastAdvanceMs)` → boolean (`nowMs - lastAdvanceMs > STALE_MS`). 동작: 비디오 프레임이 STALE_MS 이상 전진하지 않으면 `landmarks()`는 `[]`, `hands()`는 `n: 0`을 돌려준다(위치 x,y는 마지막 값 유지 — 기존 손 없음 규약과 동일).
+- Consumes: Task 2의 `detect()`·`lmarks`·`last`.
+
+- [ ] **Step 1: 실패하는 테스트 추가** — `test/cam.test.mjs` import 행을 `import { mirrorLandmarks, palmPoint, STALE_MS, isStale } from "../js/cam.js";`로 바꾸고 끝에 append:
+
+```js
+test("isStale: 프레임이 STALE_MS 넘게 전진하지 않으면 노후", () => {
+  assert.equal(isStale(1000, 1000), false);
+  assert.equal(isStale(1000 + STALE_MS, 1000), false, "경계는 아직 유효");
+  assert.equal(isStale(1000 + STALE_MS + 1, 1000), true);
+});
+```
+
+- [ ] **Step 2: 실패 확인**
+
+Run: `cd /home/ec2-user/media-art2/.worktrees/cam-contract && node --test test/cam.test.mjs 2>&1 | tail -6`
+Expected: FAIL — `STALE_MS`/`isStale` export 없음
+
+- [ ] **Step 3: 구현** — `js/cam.js`
+
+(a) 순수 헬퍼 블록(`mirrorLandmarks`·`palmPoint` 옆)에 추가:
+```js
+export const STALE_MS = 500;  // 비디오 프레임이 이만큼 전진하지 않으면 손 결과를 비운다
+export function isStale(nowMs, lastAdvanceMs) { return nowMs - lastAdvanceMs > STALE_MS; }
+```
+(b) 모듈 상태에 `let lastAdvanceMs = 0;` 추가(`lastVT` 옆). `request()` 성공 시 초기화 블록(`lastVT = -1; lmarks = []; …`)에 `lastAdvanceMs = performance.now();` 추가. `stop()`의 초기화에도 `lastAdvanceMs = 0;` 추가.
+(c) `detect()`를 다음으로 교체(기존 본문의 탐지·예외 처리는 그대로, 전진 판정과 노후 비우기만 추가):
+```js
+function detect() {
+  if (!active() || vid.readyState < 2) return;
+  const nowMs = performance.now();
+  if (vid.currentTime === lastVT) {
+    // 프레임 정지(트랙 종료·뮤트·점유): 오래되면 손 결과를 비워 소비자가 소실을 감지하게 한다
+    if (lmarks.length && isStale(nowMs, lastAdvanceMs)) { lmarks = []; last = { n: 0, x: last.x, y: last.y }; }
+    return;
+  }
+  lastVT = vid.currentTime; lastAdvanceMs = nowMs;
+  let res;
+  try { res = landmarker.detectForVideo(vid, nowMs); }
+  catch (e) { if (!detect.warned) { detect.warned = true; console.warn("손 탐지 실패 — 직전 결과 유지", e); } return; }
+  lmarks = mirrorLandmarks(res.landmarks || []);
+  if (lmarks.length) {
+    const p = palmPoint(lmarks[0]);
+    last = { n: Math.min(2, lmarks.length), x: p.x, y: p.y };
+  } else {
+    last = { n: 0, x: last.x, y: last.y };
+  }
+}
+```
+
+- [ ] **Step 4: 테스트**
+
+Run: `cd /home/ec2-user/media-art2/.worktrees/cam-contract && node --test test/ 2>&1 | tail -4`
+Expected: `# fail 0`
+
+- [ ] **Step 5: 커밋**
+
+```bash
+cd /home/ec2-user/media-art2/.worktrees/cam-contract && git add js/cam.js test/cam.test.mjs && git commit -m "$(cat <<'EOF'
+fix: cam.js 프레임 정지 시 손 결과 노후화 방지 — STALE_MS 초과면 landmarks []·hands n:0
+
+트랙 종료·뮤트·카메라 점유로 currentTime이 멈추면 마지막 검출값이 영원히 남던 문제(01번 리뷰 지적).
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 ### Task 4: pearl 브랜치에 공용 계층 merge + 03번 data.js (pearl)
 
 **Files:**
