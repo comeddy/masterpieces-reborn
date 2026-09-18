@@ -875,14 +875,18 @@ EOF
 
 - [ ] **Step 2: Playwright 시나리오** (서버 8092 재사용)
 
-버튼 클릭 전 `browser_evaluate`:
+Playwright MCP 브라우저가 다른 세션에 잠겨 있으면(`Browser is already in use`) 기다리지 말고 독립 스크립트로 우회한다: `require("/home/ec2-user/.npm/_npx/e41f203b7505f1fb/node_modules/playwright-core")` + `chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"] })`. 스크립트는 세션 스크래치 디렉터리에 두고 저장소에 넣지 않는다. Task 3 스모크가 이 방식으로 통과했다(`.playwright-mcp/task3-smoke.png`).
+
+버튼 클릭 전 `page.evaluate`/`browser_evaluate`로 시임 설치. **가짜 카메라 캔버스는 한 번만 그리면 headless Chrome에서 `video.play()`가 영원히 대기한다 — 반드시 `setInterval`로 계속 다시 그린다**:
 ```js
 window.__CAM_CDN__ = "/test/fixtures/fake-vision";
 const c = document.createElement("canvas"); c.width = 640; c.height = 480;
-c.getContext("2d").fillRect(0, 0, 640, 480);
+const g = c.getContext("2d");
+setInterval(() => { g.fillStyle = "#333"; g.fillRect(0, 0, 640, 480); g.fillStyle = "#777"; g.fillRect((Date.now() / 20) % 600, 200, 40, 40); }, 50);
 navigator.mediaDevices.getUserMedia = async () => c.captureStream(20);
 window.__FAKE_HANDS__ = { n: 1, x: 0.25, y: 0.5, pinch: false };
 ```
+손 커서 판정은 색 임계 대신 **배경 대비 밝기 핫스팟**으로 한다(03번 커서도 `lighter` 합성이라 가산 발광으로 보임): 예상 x 구간(폭 20~30%)의 최대 밝기 픽셀이 반대편(70~80%)보다 뚜렷히 밝은지 `getImageData`로 확인.
 1. `button[data-no="03"]` → `#v-cam` 클릭 → 1.5초 대기 → 스크린샷 C. Expected: 버튼 `📷 손을 비춰보세요`, **화면 왼쪽 25%** 에 촛불색 글로우 점, 우하단 미러 박스(점 무리 박스 왼쪽 25%), 먼지는 정지(손 정지 = 바람 없음).
 2. 손 스윕: `browser_evaluate`로 `let i=0; const id=setInterval(()=>{ i++; window.__FAKE_HANDS__={n:1,x:0.25+i*0.02,y:0.5}; if(i>=25) clearInterval(id); },33)` → 1초 후 스크린샷 D. Expected: 손이 지나간 띠를 따라 먼지가 흩어지고 위로 떠오름(부력).
 3. 핀치: `window.__FAKE_HANDS__={n:1,x:0.75,y:0.5,pinch:true}` → 150ms 후 스크린샷 E. Expected: 손 위치에 확대 링 + 방사형 밝기 파동. 이어서 `pinch:true` 유지 1초 후 스크린샷 F: 파동 소멸, 재발화 없음. `pinch:false` 200ms → `pinch:true` → 파동 다시 발생.
