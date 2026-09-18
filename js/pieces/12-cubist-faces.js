@@ -92,6 +92,7 @@ let feat = null;           // 이목구비 파라미터(정면/측면)
 let asm = 1;               // 조립도 1=완성, 0=흩어짐
 let state = "idle";        // idle | out | in
 let pressX = 0, pressY = 0, dragging = false;
+let cam = null, wav = null, handOn = false, handX = 0, handY = 0; // 카메라 손 입력
 
 // ---- 머리 실루엣(볼록 달걀형) — 시드 지터 ----
 function buildHead(rng) {
@@ -293,12 +294,58 @@ function drawFeatures(alpha) {
   ctx.globalAlpha = 1;
 }
 
+// --- 손 커서: 팔레트 정합 노랑 글로우 점 — 쿨다운 중엔 옅게(장전 안 됨) ---
+function drawHandCursor() {
+  if (!handOn) return;
+  const r = Math.min(W, H) * 0.02;
+  const a = wav.coolT > 0 ? 0.35 : 0.85;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(handX, handY, 0, handX, handY, r * 2.2);
+  g.addColorStop(0, `rgba(240,207,107,${a})`);   // YELLOW[1] 계열
+  g.addColorStop(1, "rgba(240,207,107,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(handX, handY, r * 2.2, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
+// --- 코너 카메라 미러: 우하단 좌우반전 프리뷰 + 손 랜드마크 오버레이 ---
+// (10번 계획 Task 5와 자구 동일 — 카메라 작품 4개+ 시 공용 헬퍼 리팩터 후보)
+function drawCamMirror() {
+  if (!cam || !cam.active()) return;
+  const v = cam.video();
+  if (!v || v.readyState < 2) return;
+  const mw = Math.min(200, W * 0.18);
+  const mh = mw * ((v.videoHeight / v.videoWidth) || 0.75);
+  const mx = W - mw - 12, my = H - mh - 12;
+  ctx.save();
+  ctx.translate(mx + mw, my); ctx.scale(-1, 1);          // 좌우반전 미러
+  ctx.globalAlpha = 0.92;
+  ctx.drawImage(v, 0, 0, mw, mh);
+  ctx.restore();
+  ctx.save();
+  ctx.fillStyle = "rgba(255,210,63,0.9)";                // 랜드마크 점
+  for (const hand of cam.landmarks()) {
+    for (const p of hand) {
+      ctx.beginPath();
+      ctx.arc(mx + (1 - p.x) * mw, my + p.y * mh, 1.5, 0, 6.283);
+      ctx.fill();
+    }
+  }
+  ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 1;
+  ctx.strokeRect(mx, my, mw, mh);
+  ctx.restore();
+}
+
 function rebuild() { buildPortrait(Math.floor(Math.random() * 2 ** 31)); asm = 0; }
 
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height; reduced = !!opts.reducedMotion;
     T = 0; asm = 1; state = "idle"; dragging = false;
+    cam = opts.cam || null;
+    wav = makeWave();
+    handOn = false;
     this.resize(W, H);
     buildPortrait(Math.floor(Math.random() * 2 ** 31));  // 첫 초상은 조립된 상태
     asm = 1;
@@ -320,25 +367,35 @@ export default {
       dragging = false;
     }
 
+    // ---- 카메라 손짓: 좌우로 크게 흔들면 재조립, 손 위치는 면 밀기 가상 포인터 ----
+    handOn = false;
+    if (cam && cam.active()) {
+      const h = cam.hands();
+      if (waveStep(wav, h.x, h.n >= 1, dt).fire && state === "idle") state = "out";
+      if (h.n >= 1) { handOn = true; handX = h.x * W; handY = h.y * H; }
+    }
+
     // ---- 재조립 상태 기계(dt 기반 전이) ----
     if (state === "out") { asm = approach(asm, -0.08, reduced ? 12 : 7, dt); if (asm < 0.06) { rebuild(); state = "in"; } }
     else if (state === "in") { asm = approach(asm, 1, reduced ? 12 : 6.5, dt); if (asm > 0.985) { asm = 1; state = "idle"; } }
 
-    // ---- 드래그: 커서 주변 면 밀림·기울기, 놓으면 스프링 안착 ----
-    const active = dragging && state === "idle";
+    // ---- 면 밀기: 입력원은 ① 마우스 드래그 ② 카메라 손 (드래그 우선) ----
+    const drag = dragging && state === "idle";
+    const push = drag || (handOn && state === "idle");
+    const pushX = drag ? ptr.x : handX, pushY = drag ? ptr.y : handY;
     const R = baseS * 0.85;
     for (const f of facets) {
       let tox = 0, toy = 0, trot = 0;
-      if (active) {
-        const cs = toScreen(f.cx, f.cy), d = Math.hypot(cs[0] - ptr.x, cs[1] - ptr.y);
+      if (push) {
+        const cs = toScreen(f.cx, f.cy), d = Math.hypot(cs[0] - pushX, cs[1] - pushY);
         if (d < R) {
           const fall = 1 - d / R;
-          tox = (cs[0] - ptr.x) / baseS * fall * 0.55;
-          toy = (cs[1] - ptr.y) / baseS * fall * 0.55;
-          trot = ((cs[0] - ptr.x) >= 0 ? 1 : -1) * fall * 0.5;
+          tox = (cs[0] - pushX) / baseS * fall * 0.55;
+          toy = (cs[1] - pushY) / baseS * fall * 0.55;
+          trot = ((cs[0] - pushX) >= 0 ? 1 : -1) * fall * 0.5;
         }
       }
-      const rate = active ? 12 : 7;   // 놓으면 스프링 안착
+      const rate = push ? 12 : 7;   // 놓으면 스프링 안착
       f.dox = approach(f.dox, tox, rate, dt);
       f.doy = approach(f.doy, toy, rate, dt);
       f.drot = approach(f.drot, trot, rate, dt);
@@ -355,7 +412,9 @@ export default {
     // 이목구비는 대체로 조립됐을 때만 또렷이(재조립 중 흐려짐)
     const fa = clamp((asm - 0.6) / 0.4, 0, 1);
     if (fa > 0.01) drawFeatures(fa);
+    drawHandCursor();
+    drawCamMirror();
   },
 
-  dispose() { ctx = null; head = null; facets = []; feat = null; },
+  dispose() { ctx = null; head = null; facets = []; feat = null; cam = null; wav = null; },
 };
