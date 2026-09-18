@@ -36,3 +36,71 @@ export function sampleFromLandmarks(lm, mirrored) {
   const c = palmCenter(lm);
   return { x: mirrored ? c.x : 1 - c.x, y: c.y, openness: openness(lm) };
 }
+
+// ---- 포인터 합성 ----
+// 펼친 손 = 물에 담긴 손(down), 주먹 = 뺀 손(up), 주먹→펼침 = 클릭(justDown).
+export const OPEN_ON = 0.5;      // 이 이상이면 펼침(down)
+export const OPEN_OFF = 0.3;     // 이 이하면 주먹(up) — 사이 구간은 직전 상태 유지(히스테리시스)
+export const LOST_GRACE = 0.4;   // 손 소실 유예(초) — 프레임 드랍 깜빡임 억제
+export const REACH = 0.15;       // 카메라 프레임 가장자리 제외 비율 — 중앙 70%를 화면 전체로
+export const SMOOTH = 14;        // 위치 EMA 반응 속도(1/s)
+
+export function makePointerState() {
+  return { seen: false, sx: 0, sy: 0, open: false, lostT: 0, downTime: 0 };
+}
+
+const reach = (t) => clamp01((t - REACH) / (1 - 2 * REACH));
+
+function setHand(hand, visible, open, speed) {
+  hand.visible = visible; hand.openness = open; hand.speed = speed;
+}
+
+// 손이 포인터를 점유하면 pointer 필드를 덮어쓰고 true, 마우스에 맡기면 pointer는
+// 건드리지 않고 false. 두 경우 모두 pointer.hand는 갱신한다. sample=null은 '손 안 보임'.
+export function applyHand(pointer, sample, state, dt, w, h) {
+  const hand = pointer.hand || (pointer.hand = { visible: false, openness: 0, speed: 0 });
+  let lost = false;
+  if (!sample) {
+    if (!state.seen) { setHand(hand, false, 0, 0); return false; }
+    state.lostT += dt;
+    if (state.lostT >= LOST_GRACE) {                 // 유예 초과 → 마우스로 복귀
+      state.seen = false; state.open = false; state.downTime = 0; state.lostT = 0;
+      setHand(hand, false, 0, 0);
+      return false;
+    }
+    lost = true;                                     // 유예 중: 직전 위치·상태 유지
+  } else {
+    state.lostT = 0;
+  }
+
+  const first = !state.seen;
+  const prevX = state.sx, prevY = state.sy;
+  if (!lost) {
+    const tx = reach(sample.x) * w, ty = reach(sample.y) * h;
+    if (first) { state.sx = tx; state.sy = ty; }     // 첫 프레임은 점프 — 화면 밖에서 끌려오지 않게
+    else {
+      const k = Math.min(1, SMOOTH * dt);
+      state.sx += (tx - state.sx) * k; state.sy += (ty - state.sy) * k;
+    }
+  }
+  state.seen = true;
+
+  let justDown = false, justUp = false;
+  if (!lost) {
+    const o = sample.openness;
+    if (!state.open && o >= OPEN_ON) { justDown = !first; state.open = true; }   // 처음부터 펼침이면 전환 아님
+    else if (state.open && o <= OPEN_OFF) { justUp = true; state.open = false; }
+    hand.openness = o;
+  }
+
+  pointer.px = first ? state.sx : prevX; pointer.py = first ? state.sy : prevY;
+  pointer.x = state.sx; pointer.y = state.sy;
+  pointer.dx = first ? 0 : state.sx - prevX; pointer.dy = first ? 0 : state.sy - prevY;
+  pointer.inside = true;
+  pointer.down = state.open;
+  pointer.justDown = justDown; pointer.justUp = justUp;
+  state.downTime = state.open ? state.downTime + dt : 0;
+  pointer.downTime = state.downTime;
+  setHand(hand, true, hand.openness, dt > 0 ? Math.hypot(pointer.dx, pointer.dy) / dt : 0);
+  return true;
+}

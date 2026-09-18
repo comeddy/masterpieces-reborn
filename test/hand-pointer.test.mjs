@@ -75,3 +75,119 @@ test("sampleFromLandmarks: 손 없음(undefined·빈 배열·21개 미만)은 nu
   assert.equal(sampleFromLandmarks([], true), null);
   assert.equal(sampleFromLandmarks(mkHand(0.5, 0.5, 1.8).slice(0, 20), true), null);
 });
+
+import { OPEN_ON, OPEN_OFF, LOST_GRACE, REACH, SMOOTH, makePointerState, applyHand }
+  from "../js/hand-pointer.js";
+
+const DT = 1 / 60, W = 1000, H = 500;
+const s = (x, y, o) => ({ x, y, openness: o });               // 합성기 입력 샘플
+const mkPointer = () => ({ x: -1e4, y: -1e4, px: -1e4, py: -1e4, dx: 0, dy: 0,
+  down: false, justDown: false, justUp: false, downTime: 0, inside: false,
+  hand: { visible: false, openness: 0, speed: 0 } });
+// sec초 동안 같은 샘플을 흘리고 마지막 반환값을 돌려준다
+const feed = (p, st, sample, sec) => {
+  let r = false;
+  for (let i = 0; i < Math.round(sec / DT); i++) r = applyHand(p, sample, st, DT, W, H);
+  return r;
+};
+
+test("REACH 매핑: 카메라 중앙 70% 구간이 화면 전체가 되고 바깥은 클램프된다", () => {
+  const cases = [[REACH, 0], [1 - REACH, W], [0.05, 0], [0.5, W / 2]];
+  for (const [x, ex] of cases) {
+    const p = mkPointer(), st = makePointerState();
+    assert.equal(applyHand(p, s(x, 0.5, 0.8), st, DT, W, H), true);
+    assert.ok(Math.abs(p.x - ex) < 1e-6, `x=${x} → ${p.x} (기대 ${ex})`);
+  }
+  const p = mkPointer(), st = makePointerState();
+  applyHand(p, s(0.5, 1 - REACH, 0.8), st, DT, W, H);
+  assert.ok(Math.abs(p.y - H) < 1e-6);
+});
+
+test("첫 프레임은 점프(dx=dy=0), 이후엔 EMA로 수렴한다", () => {
+  const p = mkPointer(), st = makePointerState();
+  applyHand(p, s(0.5, 0.5, 0.8), st, DT, W, H);
+  assert.equal(p.x, W / 2); assert.equal(p.dx, 0); assert.equal(p.dy, 0);
+  applyHand(p, s(1 - REACH, 0.5, 0.8), st, DT, W, H);      // 목표 1000으로 급변
+  assert.ok(p.x > W / 2 && p.x < W, `한 프레임 뒤 ${p.x} — 아직 도달 전`);
+  assert.ok(p.dx > 0, "오른쪽으로 이동 중");
+  feed(p, st, s(1 - REACH, 0.5, 0.8), 1);
+  assert.ok(Math.abs(p.x - W) < 1, `1초 뒤 ${p.x}`);
+});
+
+test("주먹→펼침 전환은 justDown을 정확히 한 프레임만 올린다", () => {
+  const p = mkPointer(), st = makePointerState();
+  feed(p, st, s(0.5, 0.5, 0.1), 0.2);                        // 주먹 유지
+  assert.equal(p.down, false); assert.equal(p.justDown, false);
+  applyHand(p, s(0.5, 0.5, 0.8), st, DT, W, H);              // 펼침
+  assert.equal(p.justDown, true); assert.equal(p.down, true);
+  applyHand(p, s(0.5, 0.5, 0.8), st, DT, W, H);
+  assert.equal(p.justDown, false); assert.equal(p.down, true);
+});
+
+test("처음부터 펼친 손은 down이지만 justDown은 없다(전환이 아니므로)", () => {
+  const p = mkPointer(), st = makePointerState();
+  applyHand(p, s(0.5, 0.5, 0.9), st, DT, W, H);
+  assert.equal(p.down, true); assert.equal(p.justDown, false); assert.equal(p.inside, true);
+});
+
+test("히스테리시스: 0.3~0.5 사이에서는 직전 down 상태를 유지한다", () => {
+  const p = mkPointer(), st = makePointerState();
+  applyHand(p, s(0.5, 0.5, 0.8), st, DT, W, H);
+  feed(p, st, s(0.5, 0.5, 0.4), 0.2);
+  assert.equal(p.down, true, "펼침에서 0.4로 내려와도 유지");
+  feed(p, st, s(0.5, 0.5, 0.1), 0.2);
+  feed(p, st, s(0.5, 0.5, 0.4), 0.2);
+  assert.equal(p.down, false, "주먹에서 0.4로 올라와도 유지");
+  assert.equal(p.justDown, false);
+});
+
+test("펼침→주먹 전환은 justUp 한 프레임, downTime은 주먹이면 0", () => {
+  const p = mkPointer(), st = makePointerState();
+  feed(p, st, s(0.5, 0.5, 0.8), 0.5);
+  assert.ok(p.downTime > 0.4, `downTime ${p.downTime}`);
+  applyHand(p, s(0.5, 0.5, 0.1), st, DT, W, H);
+  assert.equal(p.justUp, true); assert.equal(p.down, false); assert.equal(p.downTime, 0);
+  applyHand(p, s(0.5, 0.5, 0.1), st, DT, W, H);
+  assert.equal(p.justUp, false);
+});
+
+test("손 소실: 유예(LOST_GRACE) 미만은 직전 상태 유지, 이상이면 마우스로 반환한다", () => {
+  const p = mkPointer(), st = makePointerState();
+  feed(p, st, s(0.5, 0.5, 0.8), 0.3);
+  assert.equal(feed(p, st, null, LOST_GRACE / 2), true, "0.2초 소실은 점유 유지");
+  assert.equal(p.x, W / 2); assert.equal(p.down, true); assert.equal(p.hand.visible, true);
+  const before = { x: 123, y: 456, down: false, justDown: true };
+  let released = false;
+  for (let i = 0; i < Math.round(0.5 / DT); i++) {
+    if (!released) { Object.assign(p, before); }                 // 셸의 마우스 스냅샷을 흉내
+    const r = applyHand(p, null, st, DT, W, H);
+    if (!r) { released = true; break; }
+  }
+  assert.ok(released, "0.5초 소실이면 false");
+  assert.deepEqual({ x: p.x, y: p.y, down: p.down, justDown: p.justDown }, before,
+    "false 반환 시 포인터 필드는 그대로");
+  assert.equal(p.hand.visible, false); assert.equal(p.hand.openness, 0);
+  applyHand(p, s(1 - REACH, 0.5, 0.8), st, DT, W, H);          // 복귀 → 다시 점프
+  assert.equal(p.x, W); assert.equal(p.dx, 0); assert.equal(p.justDown, false);
+});
+
+test("한 번도 보이지 않은 상태의 null 샘플은 false이고 포인터를 건드리지 않는다", () => {
+  const p = mkPointer(), st = makePointerState();
+  p.x = 7; p.down = true;
+  assert.equal(applyHand(p, null, st, DT, W, H), false);
+  assert.equal(p.x, 7); assert.equal(p.down, true); assert.equal(p.hand.visible, false);
+});
+
+test("ptr.hand는 visible·openness·speed(px/s)를 갱신한다", () => {
+  const p = mkPointer(), st = makePointerState();
+  applyHand(p, s(0.5, 0.5, 0.7), st, DT, W, H);
+  assert.equal(p.hand.visible, true); assert.equal(p.hand.openness, 0.7); assert.equal(p.hand.speed, 0);
+  applyHand(p, s(0.6, 0.5, 0.7), st, DT, W, H);
+  assert.ok(p.hand.speed > 0, `speed ${p.hand.speed}`);
+  assert.ok(Math.abs(p.hand.speed - Math.hypot(p.dx, p.dy) / DT) < 1e-6);
+});
+
+test("상수는 스펙 값과 같다", () => {
+  assert.equal(OPEN_ON, 0.5); assert.equal(OPEN_OFF, 0.3); assert.equal(LOST_GRACE, 0.4);
+  assert.equal(REACH, 0.15); assert.equal(SMOOTH, 14);
+});
