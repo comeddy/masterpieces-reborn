@@ -43,7 +43,7 @@ micBtn.addEventListener("click", async () => {
 
 // ---------- 카메라 (cam: true 작품에서만 버튼 노출) ----------
 const camBtn = $("#v-cam");
-const CAM_LABEL = "📷 손으로 조종하기";
+const CAM_LABEL = "📷 카메라로 체험하기";
 function resetCamBtn() {
   camBtn.setAttribute("aria-pressed", "false");
   camBtn.disabled = false;
@@ -60,10 +60,10 @@ camBtn.addEventListener("click", async () => {
   camBtn.disabled = false;
   if (ok) {
     camBtn.setAttribute("aria-pressed", "true");
-    camBtn.textContent = "📷 한 손 쌓기 · 두 손 붕괴";
+    camBtn.textContent = "📷 손을 비춰보세요";
   } else {
-    camBtn.disabled = true; // 권한 거부/미지원/CDN 실패: 클릭 폴백 안내
-    camBtn.textContent = "카메라를 사용할 수 없어요 — 클릭으로 체험하세요";
+    camBtn.disabled = true; // 권한 거부/미지원/CDN 실패: 마우스 폴백 안내
+    camBtn.textContent = "카메라를 사용할 수 없어요 — 마우스로 체험하세요";
   }
 });
 
