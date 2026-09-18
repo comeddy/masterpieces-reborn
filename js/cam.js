@@ -21,9 +21,12 @@ export function palmPoint(lm) {           // 검지 MCP(5)·중지 MCP(9) 중점
   return { x: (lm[5].x + lm[9].x) * 0.5, y: (lm[5].y + lm[9].y) * 0.5 };
 }
 
+export const STALE_MS = 500;  // 비디오 프레임이 이만큼 전진하지 않으면 손 결과를 비운다
+export function isStale(nowMs, lastAdvanceMs) { return nowMs - lastAdvanceMs > STALE_MS; }
+
 let stream = null, vid = null, landmarker = null;
 let gen = 0;                   // stop()·재요청마다 증가 — 늦은 완료 무효화
-let lastVT = -1, lmarks = [];
+let lastVT = -1, lastAdvanceMs = 0, lmarks = [];
 let last = { n: 0, x: 0.5, y: 0.5 };
 
 export function active() { return !!(stream && landmarker); }
@@ -53,7 +56,7 @@ export async function request() {
     await v.play();
     if (my !== gen) throw new Error("stale");
     stream = s; vid = v; landmarker = lm;
-    lastVT = -1; lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
+    lastVT = -1; lastAdvanceMs = performance.now(); lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
     return true;
   } catch (e) {
     if (s) for (const t of s.getTracks()) t.stop(); // 늦은 완료·중간 실패 시 정리
@@ -67,12 +70,19 @@ export async function request() {
 // 새 비디오 프레임에서만 추론(중복 추론 방지). hands()/landmarks() 어느 쪽이
 // 먼저 불려도 프레임당 1회만 detectForVideo가 돈다. 예외는 직전 결과를 유지.
 function detect() {
-  if (!active() || vid.readyState < 2 || vid.currentTime === lastVT) return;
-  lastVT = vid.currentTime;
+  if (!active() || vid.readyState < 2) return;
+  const nowMs = performance.now();
+  if (vid.currentTime === lastVT) {
+    // 프레임 정지(트랙 종료·뮤트·점유): 오래되면 손 결과를 비워 소비자가 소실을 감지하게 한다
+    if (lmarks.length && isStale(nowMs, lastAdvanceMs)) { lmarks = []; last = { n: 0, x: last.x, y: last.y }; }
+    return;
+  }
+  lastVT = vid.currentTime; lastAdvanceMs = nowMs;
   let res;
-  try { res = landmarker.detectForVideo(vid, performance.now()); }
+  try { res = landmarker.detectForVideo(vid, nowMs); }
   catch (e) { if (!detect.warned) { detect.warned = true; console.warn("손 탐지 실패 — 직전 결과 유지", e); } return; }
-  lmarks = mirrorLandmarks(res.landmarks || []);          // 거울 보정 후 저장
+  // 잘린 랜드마크 배열 방어: 21점 미만 손은 버린다(palmPoint가 5·9를 인덱싱)
+  lmarks = mirrorLandmarks((res.landmarks || []).filter((lm) => lm && lm.length >= 21));
   if (lmarks.length) {
     const p = palmPoint(lmarks[0]);
     last = { n: Math.min(2, lmarks.length), x: p.x, y: p.y };
@@ -118,5 +128,5 @@ export function stop() {
   if (vid) vid.srcObject = null;
   if (landmarker) { try { landmarker.close(); } catch (_) {} }
   stream = null; vid = null; landmarker = null;
-  lastVT = -1; lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
+  lastVT = -1; lastAdvanceMs = 0; lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
 }

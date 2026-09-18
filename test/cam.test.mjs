@@ -1,7 +1,7 @@
 // test/cam.test.mjs — cam.js 순수 헬퍼(거울 보정·손바닥 대표점) 검증. 브라우저 API 미참조.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mirrorLandmarks, palmPoint } from "../js/cam.js";
+import { mirrorLandmarks, palmPoint, STALE_MS, isStale } from "../js/cam.js";
 
 const pt = (x, y) => ({ x, y, z: 0 });
 const hand = (fn) => Array.from({ length: 21 }, (_, i) => fn(i));
@@ -28,4 +28,10 @@ test("palmPoint: 랜드마크 5·9의 중점", () => {
   const lm = hand((i) => (i === 5 ? pt(0.2, 0.6) : i === 9 ? pt(0.4, 0.8) : pt(0, 0)));
   const p = palmPoint(lm);
   assert.ok(Math.abs(p.x - 0.3) < 1e-12 && Math.abs(p.y - 0.7) < 1e-12, JSON.stringify(p));
+});
+
+test("isStale: 프레임이 STALE_MS 넘게 전진하지 않으면 노후", () => {
+  assert.equal(isStale(1000, 1000), false);
+  assert.equal(isStale(1000 + STALE_MS, 1000), false, "경계는 아직 유효");
+  assert.equal(isStale(1000 + STALE_MS + 1, 1000), true);
 });
