@@ -48,6 +48,7 @@
 
   <section class="viewer" id="viewer" role="dialog" aria-modal="true" aria-hidden="true">
     <canvas id="stage"></canvas>
+    <div id="hand-cursor" class="hand-cursor" hidden aria-hidden="true"></div>
     <div class="viewer__chrome">
       <button class="viewer__close" data-action="close" aria-label="전시관으로 돌아가기">✕</button>
       <button class="viewer__nav viewer__nav--prev" data-action="prev" aria-label="이전 작품">‹</button>
@@ -59,6 +60,7 @@
         <p class="viewer__note" id="v-note"></p>
         <p class="viewer__hint" id="v-hint"></p>
         <button class="viewer__mic" id="v-mic" hidden aria-pressed="false">🎤 소리로 생명 불어넣기</button>
+        <button class="viewer__cam" id="v-cam" hidden aria-pressed="false">📷 카메라로 체험하기</button>
       </div>
       <button class="viewer__infotoggle" data-action="info" aria-expanded="true" aria-label="작품 설명 접기/펼치기">ⓘ</button>
     </div>
