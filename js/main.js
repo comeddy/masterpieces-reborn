@@ -2,6 +2,7 @@
 import { WINGS, WORKS, wingOf } from "./data.js";
 import * as mic from "./mic.js";
 import * as cam from "./cam.js";
+import { palmCenter, sampleFromLandmarks, makePointerState, applyHand } from "./hand-pointer.js";
 
 const $ = (sel) => document.querySelector(sel);
 const body = document.body;
@@ -113,7 +114,8 @@ $(".brand").addEventListener("click", closeWork);
 // 이벤트는 원시 상태만 기록, 프레임마다 스냅샷을 tick에 전달
 const raw = { x: -1e4, y: -1e4, down: false, inside: false, pendingDown: false, pendingUp: false };
 const pointer = { x: -1e4, y: -1e4, px: -1e4, py: -1e4, dx: 0, dy: 0,
-                  down: false, justDown: false, justUp: false, downTime: 0, inside: false };
+                  down: false, justDown: false, justUp: false, downTime: 0, inside: false,
+                  hand: { visible: false, openness: 0, speed: 0 } };   // 손 합성 부가 정보(작품 선택 소비)
 canvas.addEventListener("pointermove", (e) => { raw.x = e.clientX; raw.y = e.clientY; raw.inside = true; });
 canvas.addEventListener("pointerdown", (e) => {
   raw.x = e.clientX; raw.y = e.clientY; raw.down = true; raw.pendingDown = true;
@@ -132,6 +134,41 @@ function snapshotPointer(dt) {
   pointer.down = raw.down;
   pointer.inside = raw.inside;
   pointer.downTime = pointer.down ? pointer.downTime + dt : 0;
+}
+
+// ---------- 손 → 포인터 합성 (handPointer: true 작품) ----------
+// cam.js 계약: hands().x는 항상 거울 보정(1 − 원본)이지만 landmarks()의 좌표계는 구현에 따라
+// 원본일 수도, 보정 후일 수도 있다. 상수로 고정하지 않고 매 프레임 hands().x와 손바닥 중심을
+// 비교해 판별한다 — cam.js가 좌표계를 바꿔도 손이 반대로 움직이는 회귀가 생기지 않는다.
+const handCursor = $("#hand-cursor");
+let handState = makePointerState();
+let stageW = 0, stageH = 0;   // sizeCanvas()의 CSS px — 합성 좌표 범위
+
+function landmarksMirrored(h, lm) {
+  const cx = palmCenter(lm).x;
+  return Math.abs(h.x - cx) <= Math.abs(h.x - (1 - cx));   // 보정 후 좌표면 hands().x가 중심과 가깝다
+}
+
+function synthesizeHand(dt) {
+  const work = WORKS[current];
+  if (!(work && work.handPointer && cam.active())) {
+    pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
+    return false;
+  }
+  const h = cam.hands();                                  // 이 프레임의 추론 트리거(1회 캐시는 cam.js 보장)
+  const lm = cam.landmarks();
+  const primary = lm && lm[0];
+  const sample = primary && primary.length >= 21
+    ? sampleFromLandmarks(primary, landmarksMirrored(h, primary)) : null;
+  return applyHand(pointer, sample, handState, dt, stageW, stageH);
+}
+
+function updateHandCursor(owns) {
+  handCursor.hidden = !owns;
+  if (!owns) return;
+  handCursor.style.transform = `translate(${pointer.x}px, ${pointer.y}px) translate(-50%, -50%)`;
+  handCursor.style.setProperty("--hand-open", pointer.hand.openness.toFixed(2));
+  handCursor.classList.toggle("is-down", pointer.down);
 }
 
 // ---------- 뷰어 ----------
@@ -181,7 +218,7 @@ async function openWork(idx) {
   camBtn.hidden = !work.cam;
   $("#v-error").hidden = true;
 
-  const { w, h } = sizeCanvas();
+  const { w, h } = sizeCanvas(); stageW = w; stageH = h;
   try {
     const [mod, target] = await Promise.all([import(work.module), loadImage(work.asset)]);
     if (current !== idx) return; // 로딩 중 다른 작품으로 이동함
@@ -207,6 +244,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); // 탭 복귀 시 폭주 방지 캡
   lastT = now;
   snapshotPointer(dt);
+  updateHandCursor(synthesizeHand(dt));   // 손이 보이면 이 프레임의 포인터는 손
   try {
     piece.tick(dt, pointer);
   } catch (err) {
@@ -225,6 +263,7 @@ async function closeWork() {
   micReqSeq++; // 대기 중인 마이크 권한 요청의 늦은 완료를 무효화
   mic.stop(); resetMicBtn(); micBtn.hidden = true;
   camReqSeq++; cam.stop(); resetCamBtn(); camBtn.hidden = true;
+  handState = makePointerState(); handCursor.hidden = true;   // 합성 상태·링 커서 초기화
   current = -1;
   body.dataset.view = "atrium";
   $("#viewer").setAttribute("aria-hidden", "true");
@@ -254,6 +293,6 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("resize", () => {
   if (body.dataset.view !== "viewer" || !piece) return;
-  const { w, h } = sizeCanvas();
+  const { w, h } = sizeCanvas(); stageW = w; stageH = h;
   piece.resize(w, h);
 });
