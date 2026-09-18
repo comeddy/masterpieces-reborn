@@ -15,6 +15,7 @@ const BRICK = [168, 103, 74];        // #a8674a
 const FLATTEN = 0.34;                // 원근 납작 타원 ry/rx
 const SPIRAL = 0.20;                 // 층마다 나선 오프셋
 const G = 1650;                      // 중력(월드/s^2)
+const MAX_TIERS = 40;                // 탑 높이 상한 — 초과 시 상부가 스스로 무너진다
 
 // ---- 카메라 제스처 상태 기계 (순수, node:test 대상) ----
 // 한 손: BUILD_INTERVAL마다 쌓기 발화 / 두 손: COLLAPSE_HOLD 유지 시 붕괴 1회
@@ -108,6 +109,12 @@ function collapseAt(sy) {
   if (!tiers.length) return;
   const th = tierH();
   const from = Math.max(0, Math.min(Math.round(-(sy - groundY) / camS / th - 0.5), tiers.length - 1));
+  collapseFrom(from);
+}
+
+function collapseFrom(from) {
+  if (!tiers.length) return;
+  const th = tierH();
   for (const b of blocks) {
     if (b.t < from) continue;
     const rx = rxAt(b.t), ry = rx * FLATTEN, a = baseAngle(b.t) + b.i * 6.283 / b.cap;
@@ -169,6 +176,8 @@ function update(dt, ptr) {
   }
   buildTimer += dt;                                      // 자동 건설(2~3s)
   if (buildTimer >= buildInterval) { buildTimer = 0; buildInterval = rand(2, 3); placeNextAuto(); }
+  // 높이 상한: 하늘에 닿을 듯하면 상부가 스스로 무너진다 — 끝없는 오만과 붕괴의 순환
+  if (tiers.length > MAX_TIERS) collapseFrom(Math.floor(MAX_TIERS * 0.4));
   for (const b of blocks) {                              // 낙하 안착(살짝 튕김)
     if (b.state !== "falling") continue;
     b.vy += G * dt; b.oy += b.vy * dt;
