@@ -85,9 +85,10 @@ export const WORKS = [
   },
   {
     no: "11", wing: "dream", title: "After Klimt — The Tree of Life", ko: "생명의 나무",
-    medium: "Golden spiral growth · WebAudio · after Klimt (1905–09, public domain)", year: "2026",
-    note: "클림트의 생명의 나무가 금빛 나선을 뻗으며 자라난다. 가지는 하늘을 향해 감아 올라가 저마다의 소용돌이로 말리고, 클릭한 자리에서는 새 가지가 돋아 피어난다. 가지 사이에 클림트의 검은 새가 내려앉는 — 삶과 죽음과 재생이 한 그루에 감긴 나무.",
-    hint: "클릭한 곳에서 새 가지가 자랍니다 · 드래그로 바람 · 사운드를 켜면 가지가 필 때 울림",
+    medium: "Golden spiral growth · Hand tracking · WebAudio · after Klimt (1905–09, public domain)", year: "2026",
+    note: "클림트의 생명의 나무가 금빛 나선을 뻗으며 자라난다. 가지는 하늘을 향해 감아 올라가 저마다의 소용돌이로 말리고, 손을 내밀어 머무는 자리에서는 새 가지가 돋아 손을 향해 피어난다. 가지 사이에 클림트의 검은 새가 내려앉는 — 삶과 죽음과 재생이 한 그루에 감긴 나무.",
+    hint: "📷를 켜고 손을 들면 그곳으로 가지가 자랍니다 · 휘두르면 바람 · 커서로도 가능합니다",
+    cam: true,
     module: "./pieces/11-tree-of-life.js",
   },
   {
