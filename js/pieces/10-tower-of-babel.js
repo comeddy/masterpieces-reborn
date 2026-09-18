@@ -280,7 +280,7 @@ function drawHandCursors() {
   ctx.globalCompositeOperation = "lighter";
   for (let i = 0; i < Math.min(2, L.length); i++) {
     const p = L[i][9];                                   // 손바닥 중심 근사
-    const x = (1 - p.x) * W, y = p.y * H;                // 거울 보정
+    const x = p.x * W, y = p.y * H;                      // landmarks()는 이미 거울 보정 좌표
     const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
     g.addColorStop(0, col + "0.85)");
     g.addColorStop(1, col + "0)");
@@ -298,31 +298,12 @@ function drawHandCursors() {
   ctx.restore();
 }
 
-// --- 코너 카메라 미러: 우하단 좌우반전 프리뷰 + 손 랜드마크 오버레이 ---
+// --- 코너 카메라 미러: 우하단, 렌더는 공용 cam.drawMirror ---
 function drawCamMirror() {
   if (!cam || !cam.active()) return;
-  const v = cam.video();
-  if (!v || v.readyState < 2) return;
   const mw = Math.min(200, W * 0.18);
-  const mh = mw * ((v.videoHeight / v.videoWidth) || 0.75);
-  const mx = W - mw - 12, my = H - mh - 12;
-  ctx.save();
-  ctx.translate(mx + mw, my); ctx.scale(-1, 1);          // 좌우반전 미러
-  ctx.globalAlpha = 0.92;
-  ctx.drawImage(v, 0, 0, mw, mh);
-  ctx.restore();
-  ctx.save();
-  ctx.fillStyle = "rgba(255,210,63,0.9)";                // 랜드마크 점
-  for (const hand of cam.landmarks()) {
-    for (const p of hand) {
-      ctx.beginPath();
-      ctx.arc(mx + (1 - p.x) * mw, my + p.y * mh, 1.5, 0, 6.283);
-      ctx.fill();
-    }
-  }
-  ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 1;
-  ctx.strokeRect(mx, my, mw, mh);
-  ctx.restore();
+  const mh = mw * 0.75;                                   // 640×480 비율
+  cam.drawMirror(ctx, { x: W - mw - 12, y: H - mh - 12, w: mw, h: mh });
 }
 
 export default {
