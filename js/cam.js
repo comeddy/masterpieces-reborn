@@ -3,6 +3,8 @@
 // MediaPipe HandLandmarker는 request() 안에서만 동적 import — 버튼을 누르기
 // 전에는 아무것도 내려받지 않고, 이 모듈은 node에서 import-safe다.
 // 영상은 로컬 추론 전용 — 녹화·전송·저장하지 않는다.
+// 좌표계: hands()·landmarks()는 모두 **거울 보정 후**(x → 1-x) 0..1 정규화 좌표다.
+// 관객이 오른쪽으로 손을 움직이면 x가 커진다. 주 손은 landmarks()[0].
 
 // E2E 주입 시임: 테스트가 window.__CAM_CDN__으로 가짜 번들 경로를 준다
 const cdnBase = () =>
@@ -10,6 +12,14 @@ const cdnBase = () =>
   "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+
+// ---- 순수 헬퍼 (node:test 대상, 브라우저 API 미참조) ----
+export function mirrorLandmarks(hands) {
+  return hands.map((lm) => lm.map((p) => ({ x: 1 - p.x, y: p.y, z: p.z })));
+}
+export function palmPoint(lm) {           // 검지 MCP(5)·중지 MCP(9) 중점 — 손바닥 대표점
+  return { x: (lm[5].x + lm[9].x) * 0.5, y: (lm[5].y + lm[9].y) * 0.5 };
+}
 
 let stream = null, vid = null, landmarker = null;
 let gen = 0;                   // stop()·재요청마다 증가 — 늦은 완료 무효화
@@ -54,24 +64,25 @@ export async function request() {
   }
 }
 
-// 매 프레임 폴링 — 새 비디오 프레임에서만 추론(중복 추론 방지)
-export function hands() {
-  if (!active() || vid.readyState < 2) return last;
-  if (vid.currentTime !== lastVT) {
-    lastVT = vid.currentTime;
-    const res = landmarker.detectForVideo(vid, performance.now());
-    lmarks = res.landmarks || [];
-    if (lmarks.length) {
-      const p = lmarks[0][9];              // 주 손: 중지 기저(손바닥 중심 근사)
-      last = { n: Math.min(2, lmarks.length), x: 1 - p.x, y: p.y }; // 거울 보정
-    } else {
-      last = { n: 0, x: last.x, y: last.y };
-    }
+// 새 비디오 프레임에서만 추론(중복 추론 방지). hands()/landmarks() 어느 쪽이
+// 먼저 불려도 프레임당 1회만 detectForVideo가 돈다. 예외는 직전 결과를 유지.
+function detect() {
+  if (!active() || vid.readyState < 2 || vid.currentTime === lastVT) return;
+  lastVT = vid.currentTime;
+  let res;
+  try { res = landmarker.detectForVideo(vid, performance.now()); }
+  catch (e) { if (!detect.warned) { detect.warned = true; console.warn("손 탐지 실패 — 직전 결과 유지", e); } return; }
+  lmarks = mirrorLandmarks(res.landmarks || []);          // 거울 보정 후 저장
+  if (lmarks.length) {
+    const p = palmPoint(lmarks[0]);
+    last = { n: Math.min(2, lmarks.length), x: p.x, y: p.y };
+  } else {
+    last = { n: 0, x: last.x, y: last.y };
   }
-  return last;
 }
 
-export function landmarks() { return lmarks; }
+export function hands() { detect(); return last; }
+export function landmarks() { detect(); return lmarks; }
 export function video() { return vid; }
 
 export function stop() {

@@ -280,7 +280,7 @@ function drawHandCursors() {
   ctx.globalCompositeOperation = "lighter";
   for (let i = 0; i < Math.min(2, L.length); i++) {
     const p = L[i][9];                                   // 손바닥 중심 근사
-    const x = (1 - p.x) * W, y = p.y * H;                // 거울 보정
+    const x = p.x * W, y = p.y * H;                      // landmarks()는 이미 거울 보정 좌표
     const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
     g.addColorStop(0, col + "0.85)");
     g.addColorStop(1, col + "0)");
