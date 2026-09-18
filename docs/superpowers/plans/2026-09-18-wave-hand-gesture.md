@@ -14,7 +14,7 @@
 
 - 작업 위치는 worktree **`/home/ec2-user/media-art2/.worktrees/wave-hand-gesture`**(브랜치 `feature/wave-hand-gesture`). 메인 체크아웃 `/home/ec2-user/media-art2`에서 `git checkout` 금지 — 다른 세션이 HEAD를 공유한다. 커밋 직후 `git log -1`로 브랜치 확인. bare `git stash` 금지(스태시 공유).
 - `js/hand-pointer.js`는 브라우저 API를 참조하지 않는 순수 모듈 — node에서 import-safe.
-- `js/cam.js`는 이 브랜치에서 **구현·수정하지 않는다**(Task 5 예외 상황만). 계약: `request/active/stop`, `hands()`(추론 트리거), `landmarks(): Array<Array<{x,y,z}>>`(거울 보정 후 좌표, 주 손 `[0]`, 없으면 `[]`).
+- `js/cam.js`는 이 브랜치에서 **구현·수정하지 않는다**(Task 5 예외 상황만). 계약: `request/active/stop`, `hands()`(추론 트리거, `.x`는 거울 보정), `landmarks(): Array<Array<{x,y,z}>>`(좌표계는 원본/보정 후 어느 쪽이든 — 셸이 자동 판별, 주 손 `[0]`, 없으면 `[]`).
 - 기존 마우스 인터랙션, 다른 15개 작품, 셸의 기존 규약(mic 포함) 무변경. 카메라 미사용·실패 시 01번은 마우스로 정상 동작.
 - 주석·문구는 한국어, 기존 파일의 주석 밀도·스타일을 따른다. 커밋 메시지는 `feat:`/`fix:`/`docs:` + 한국어 요약, 끝에 `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
 - 테스트는 `node --test test/` 전부 통과. 순수 로직만 단위 테스트, 캔버스 렌더는 Playwright 시각 검증.
@@ -540,7 +540,7 @@ grep -n "cam.stop()\|camBtn.hidden = !work.cam\|cam: {" js/main.js
 grep -n "거울\|mirror\|1 - " js/cam.js | head
 node --test test/
 ```
-Expected: export에 `request active stop hands landmarks`(+video/drawMirror 선택) 존재; 버튼·플래그·stop 배선 존재; landmarks 좌표계 주석 확인(거울 보정 후면 Task 6에서 `CAM_LANDMARKS_MIRRORED = true`, 원본이면 false); 테스트 전부 PASS.
+Expected: export에 `request active stop hands landmarks`(+video/drawMirror 선택) 존재; 버튼·플래그·stop 배선 존재; landmarks 좌표계 주석 확인(원본이든 보정 후든 Task 6의 자동 판별이 흡수 — 기록만); 테스트 전부 PASS.
 
 - [ ] **Step 4: 공용 문구 중립화(필요 시)** — `js/main.js`의 카메라 버튼 문구가 10번 전용이면 교체
 
@@ -682,7 +682,7 @@ camBtn.addEventListener("click", async () => {
 - [ ] **Step 3: main.js — import** (`import * as cam from "./cam.js";` 아래)
 
 ```js
-import { sampleFromLandmarks, makePointerState, applyHand } from "./hand-pointer.js";
+import { palmCenter, sampleFromLandmarks, makePointerState, applyHand } from "./hand-pointer.js";
 ```
 
 - [ ] **Step 4: main.js — 포인터 규약 블록 수정**
@@ -696,12 +696,17 @@ const pointer = { x: -1e4, y: -1e4, px: -1e4, py: -1e4, dx: 0, dy: 0,
 `snapshotPointer` 함수 바로 아래에 합성 블록 추가:
 ```js
 // ---------- 손 → 포인터 합성 (handPointer: true 작품) ----------
-// cam.js의 landmarks()는 hands()와 같은 거울 보정 후 좌표(x = 1 − 원본) — cam.js 주석 참조.
-// 원본 좌표를 돌려주는 구현이면 false로 바꾸면 어댑터가 뒤집는다.
-const CAM_LANDMARKS_MIRRORED = true;
+// cam.js 계약: hands().x는 항상 거울 보정(1 − 원본)이지만 landmarks()의 좌표계는 구현에 따라
+// 원본일 수도, 보정 후일 수도 있다. 상수로 고정하지 않고 매 프레임 hands().x와 손바닥 중심을
+// 비교해 판별한다 — cam.js가 좌표계를 바꿔도 손이 반대로 움직이는 회귀가 생기지 않는다.
 const handCursor = $("#hand-cursor");
 let handState = makePointerState();
 let stageW = 0, stageH = 0;   // sizeCanvas()의 CSS px — 합성 좌표 범위
+
+function landmarksMirrored(h, lm) {
+  const cx = palmCenter(lm).x;
+  return Math.abs(h.x - cx) <= Math.abs(h.x - (1 - cx));   // 보정 후 좌표면 hands().x가 중심과 가깝다
+}
 
 function synthesizeHand(dt) {
   const work = WORKS[current];
@@ -709,9 +714,11 @@ function synthesizeHand(dt) {
     pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
     return false;
   }
-  cam.hands();                                            // 이 프레임의 추론 트리거(1회 캐시는 cam.js 보장)
+  const h = cam.hands();                                  // 이 프레임의 추론 트리거(1회 캐시는 cam.js 보장)
   const lm = cam.landmarks();
-  const sample = sampleFromLandmarks(lm && lm[0], CAM_LANDMARKS_MIRRORED);
+  const primary = lm && lm[0];
+  const sample = primary && primary.length >= 21
+    ? sampleFromLandmarks(primary, landmarksMirrored(h, primary)) : null;
   return applyHand(pointer, sample, handState, dt, stageW, stageH);
 }
 
