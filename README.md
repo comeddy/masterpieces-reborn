@@ -89,7 +89,7 @@ The user reviewed screenshots after each change; several pieces went through mul
 
 ### 6. Verification culture
 
-- 11 Node tests (data integrity, particle-engine math, module interface conformance) run on every task
+- Node tests (data integrity, particle-engine math, module interface conformance, camera/hand gesture logic) run on every task
 - Every piece was driven in a real browser (Playwright) — screenshots, console-error checks, interaction simulation, dispose/re-enter cycles
 - Independent per-task reviews plus a final whole-branch review before each merge; content reviews scored 93/100 and 92/100 with findings fixed before deploy
 
@@ -125,6 +125,7 @@ python3 -m http.server 8090
 - In Great Wave (No. 01), press 📷 to control the sea by hand: an open palm dragged through the water swirls it; closing a fist and opening it again throws spray
 - In Tower of Babel (No. 10), press 📷 and raise one hand to build, or hold up both hands for a moment to collapse the tower
 - In The Tree of Life (No. 11), press 📷 and hold up a hand: new golden branches sprout toward wherever your hand lingers, and sweeping it sideways stirs the wind through the whole tree. The mouse keeps working as a fallback
+- In Girl with a Pearl Earring (No. 03), press 📷 and your hand becomes the candle: sweep it to blow the light-dust away, and pinch thumb and index fingertips together to make the flame flicker in a wave of light. The mouse keeps working as a fallback
 
 Deploy your own copy (creates an S3 bucket and CloudFront distribution on first run):
 
@@ -281,6 +282,7 @@ python3 -m http.server 8090
 - 01번 가나가와 파도에서 📷를 누르면 손으로 바다를 다룹니다. 펼친 손을 움직이면 소용돌이, 주먹을 쥐었다 펼치면 물보라
 - 10번 바벨탑에서 📷를 누르고 한 손을 들면 탑이 쌓이고, 두 손을 잠시 들고 있으면 무너집니다
 - 11번 생명의 나무에서 📷를 누르고 손을 들면 손이 머무는 자리로 금빛 가지가 돋아 자라고, 좌우로 휘두르면 나무 전체에 바람이 입니다. 마우스로도 그대로 가능합니다
+- 03번 진주 귀걸이를 한 소녀에서 📷를 누르면 손이 촛불이 됩니다. 손을 휙 저으면 빛 먼지가 흩날리고, 엄지와 검지 끝을 맞대면 촛불이 깜빡이며 빛의 파동이 퍼집니다. 마우스로도 그대로 가능합니다
 
 직접 배포하려면(최초 실행 시 S3 버킷과 CloudFront 배포를 생성합니다):
 
@@ -309,7 +311,7 @@ masterpieces-reborn/
 
 ```bash
 node --test test/
-# 11개 테스트: 데이터 구조, 입자 엔진 수학, 모듈 무결성
+# Node 테스트: 데이터 구조, 입자 엔진 수학, 모듈 무결성, 카메라·손 제스처 로직
 ```
 
 ## 기여 방법
