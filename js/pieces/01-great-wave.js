@@ -246,12 +246,16 @@ export default {
     }
     crashFlash = Math.max(0, crashFlash - dt * 0.5);
 
-    // ---- 인터랙션: 드래그 = 소용돌이, 클릭 = 물보라 ----
+    // ---- 인터랙션: 드래그·펼친 손 = 소용돌이, 클릭·주먹→펼침 = 물보라 (손은 셸이 포인터로 합성) ----
     if (ptr.inside && ptr.down) {
       const speed = Math.hypot(ptr.dx, ptr.dy);
       field.swirl(ptr.x, ptr.y, 130 + speed * 3, 40 + speed * 22);
     }
-    if (ptr.justDown) field.scatter(ptr.x, ptr.y, 150, reduced ? 200 : 420);
+    if (ptr.justDown) {
+      // 손 입력(주먹→펼침)이면 물을 손으로 튕기는 감각 — 반경·세기 1.4배
+      const k = ptr.hand && ptr.hand.visible ? 1.4 : 1;
+      field.scatter(ptr.x, ptr.y, 150 * k, (reduced ? 200 : 420) * k);
+    }
 
     field.step(dt);
     render();
