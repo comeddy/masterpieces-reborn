@@ -9,11 +9,44 @@ let blocks = [];  // 개별 블록 {t, i, cap, r, g, b, oy, vy, state}
 let debris = [];  // 붕괴 파편(월드 물리) / dust: 흙먼지 / clouds: 구름
 let dust = [], clouds = [];
 let buildTimer = 0, buildInterval = 2.5, heldTime = 0, collapseDone = false;
+let cam = null, gest = null, handPt = { x: 0, y: 0, n: 0 }; // 카메라 제스처 입력
 
 const BRICK = [168, 103, 74];        // #a8674a
 const FLATTEN = 0.34;                // 원근 납작 타원 ry/rx
 const SPIRAL = 0.20;                 // 층마다 나선 오프셋
 const G = 1650;                      // 중력(월드/s^2)
+const MAX_TIERS = 40;                // 탑 높이 상한 — 초과 시 상부가 스스로 무너진다
+
+// ---- 카메라 제스처 상태 기계 (순수, node:test 대상) ----
+// 한 손: BUILD_INTERVAL마다 쌓기 발화 / 두 손: COLLAPSE_HOLD 유지 시 붕괴 1회
+// 발화 후 COLLAPSE_COOL 쿨다운. 손 개수 변화는 N_GRACE 유예로 프레임 드랍 흡수.
+export const BUILD_INTERVAL = 0.3;
+export const COLLAPSE_HOLD = 0.8;
+export const COLLAPSE_COOL = 3;
+export const N_GRACE = 0.25;
+
+export function makeGesture() {
+  return { n: 0, graceT: 0, holdT: 0, coolT: 0, buildT: 0 };
+}
+
+export function gestureStep(g, n, dt) {
+  const out = { build: false, collapse: false };
+  g.coolT = Math.max(0, g.coolT - dt);
+  if (n !== g.n) {
+    g.graceT += dt;                       // 다른 값이 유예 이상 지속돼야 전환
+    if (g.graceT >= N_GRACE) { g.n = n; g.graceT = 0; g.holdT = 0; g.buildT = 0; }
+  } else {
+    g.graceT = 0;
+  }
+  if (g.n === 1) {
+    g.buildT += dt;
+    if (g.buildT >= BUILD_INTERVAL) { g.buildT = 0; out.build = true; }
+  } else if (g.n === 2 && g.coolT <= 0) {
+    g.holdT += dt;
+    if (g.holdT >= COLLAPSE_HOLD) { g.holdT = 0; g.coolT = COLLAPSE_COOL; out.collapse = true; }
+  }
+  return out;
+}
 
 const rand = (a, b) => a + Math.random() * (b - a);
 const baseRx = () => Math.min(W, H) * 0.30;
@@ -76,6 +109,12 @@ function collapseAt(sy) {
   if (!tiers.length) return;
   const th = tierH();
   const from = Math.max(0, Math.min(Math.round(-(sy - groundY) / camS / th - 0.5), tiers.length - 1));
+  collapseFrom(from);
+}
+
+function collapseFrom(from) {
+  if (!tiers.length) return;
+  const th = tierH();
   for (const b of blocks) {
     if (b.t < from) continue;
     const rx = rxAt(b.t), ry = rx * FLATTEN, a = baseAngle(b.t) + b.i * 6.283 / b.cap;
@@ -122,8 +161,23 @@ function update(dt, ptr) {
     const n = 3 + (Math.random() * 3 | 0);               // 3~5개
     for (let k = 0; k < n; k++) placeNear(ptr.x + rand(-8, 8), ptr.y + rand(-6, 6));
   }
+  // 카메라 제스처: 한 손=조준 지점에 쌓기 / 두 손=유지 시 그 위 붕괴 (클릭과 병행)
+  if (cam && cam.active()) {
+    const h = cam.hands();
+    handPt = { x: h.x * W, y: h.y * H, n: h.n };
+    const act = gestureStep(gest, h.n, dt);
+    if (act.build) {
+      const c = 3 + (Math.random() * 3 | 0);             // 클릭과 동일한 3~5개
+      for (let k = 0; k < c; k++) placeNear(handPt.x + rand(-8, 8), handPt.y + rand(-6, 6));
+    }
+    if (act.collapse) collapseAt(handPt.y);
+  } else {
+    handPt.n = 0;
+  }
   buildTimer += dt;                                      // 자동 건설(2~3s)
   if (buildTimer >= buildInterval) { buildTimer = 0; buildInterval = rand(2, 3); placeNextAuto(); }
+  // 높이 상한: 하늘에 닿을 듯하면 상부가 스스로 무너진다 — 끝없는 오만과 붕괴의 순환
+  if (tiers.length > MAX_TIERS) collapseFrom(Math.floor(MAX_TIERS * 0.4));
   for (const b of blocks) {                              // 낙하 안착(살짝 튕김)
     if (b.state !== "falling") continue;
     b.vy += G * dt; b.oy += b.vy * dt;
@@ -214,12 +268,53 @@ function drawTower() {
   ctx.globalAlpha = 1; ctx.restore();
 }
 
+// --- 캔버스 손 커서: 한 손=호박색, 두 손=붉은색 + 유지 진행 링 ---
+function drawHandCursors() {
+  if (!cam || !cam.active()) return;
+  const L = cam.landmarks();
+  if (!L.length) return;
+  const two = L.length >= 2;
+  const col = two ? "rgba(255,90,70," : "rgba(255,190,90,";
+  const r = Math.min(W, H) * 0.02;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (let i = 0; i < Math.min(2, L.length); i++) {
+    const p = L[i][9];                                   // 손바닥 중심 근사
+    const x = p.x * W, y = p.y * H;                      // landmarks()는 이미 거울 보정 좌표
+    const g = ctx.createRadialGradient(x, y, 0, x, y, r * 2.2);
+    g.addColorStop(0, col + "0.85)");
+    g.addColorStop(1, col + "0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, r * 2.2, 0, 6.283); ctx.fill();
+    if (two && i === 0 && gest.coolT <= 0 && gest.holdT > 0) { // 붕괴 유지 진행 링
+      ctx.strokeStyle = col + "0.9)";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x, y, r * 1.4, -Math.PI / 2,
+        -Math.PI / 2 + 6.283 * Math.min(1, gest.holdT / COLLAPSE_HOLD));
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// --- 코너 카메라 미러: 우하단, 렌더는 공용 cam.drawMirror ---
+function drawCamMirror() {
+  if (!cam || !cam.active()) return;
+  const mw = Math.min(200, W * 0.18);
+  const mh = mw * 0.75;                                   // 640×480 비율
+  cam.drawMirror(ctx, { x: W - mw - 12, y: H - mh - 12, w: mw, h: mh });
+}
+
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height; reduced = !!opts.reducedMotion; T = 0;
     tiers = []; blocks = []; debris = []; dust = [];
     buildTimer = 0; buildInterval = rand(2, 3); heldTime = 0; collapseDone = false;
     camS = 1; camTarget = 1; cx = W * 0.5; groundY = H * 0.80;
+    cam = opts.cam || null;
+    gest = makeGesture();
+    handPt = { x: 0, y: 0, n: 0 };
     initClouds();
     for (let t = 0; t < 3; t++) {                        // 밑동 몇 층 미리 세움
       const cap = capAt(t); ensureTier(t);
@@ -230,7 +325,7 @@ export default {
       }
     }
   },
-  tick(dt, ptr) { update(dt, ptr); drawSky(); drawTower(); },
+  tick(dt, ptr) { update(dt, ptr); drawSky(); drawTower(); drawHandCursors(); drawCamMirror(); },
   resize(w, h) { W = w; H = h; cx = W * 0.5; groundY = H * 0.80; },
-  dispose() { ctx = null; tiers = []; blocks = []; debris = []; dust = []; clouds = []; },
+  dispose() { ctx = null; tiers = []; blocks = []; debris = []; dust = []; clouds = []; cam = null; gest = null; },
 };
