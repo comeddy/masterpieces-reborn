@@ -44,8 +44,8 @@
 - `active(): boolean` — 스트림과 랜드마커가 모두 준비된 상태.
 - `hands(): { n: 0|1|2, x: number, y: number }` — 감지된 손 개수(최대 2)와 주
   손(첫 번째 손)의 손바닥 대표점(검지 MCP 5번·중지 MCP 9번 랜드마크의 중점)을
-  0..1 정규화한 좌표. **거울 보정: x는 1-x로 반전**. 손이 없으면 `n: 0`,
-  `x`·`y`는 `-1`.
+  0..1 정규화한 좌표. **거울 보정: x는 1-x로 반전**. 손이 없으면 `n: 0`이고
+  `x`·`y`는 마지막 값을 유지한다(소비자는 `n`으로 판정).
 - `landmarks(): Array<Array<{x,y,z}>>` — 감지된 손들의 21점 랜드마크(정규화,
   `hands()`와 같은 거울 보정 좌표계). 손이 없으면 빈 배열.
 - `video(): HTMLVideoElement | null`.
@@ -64,9 +64,12 @@
   `request()`의 각 `await` 경계(getUserMedia → import → 모델 생성)에서 stale 체크
   후 획득 자원 정리. 권한 대기 중 뷰어 닫힘 레이스 봉합.
 - **순수 계산부 분리·export** (node:test 대상, 브라우저 API 미참조):
-  - `mirrorX(x)` → `1 - x`
-  - `palmPoint(lm)` → 랜드마크 5·9 중점 `{x, y}` (거울 보정 포함)
-  - `shouldDetect(now, lastTs)` → `now > lastTs`
+  - `mirrorLandmarks(hands)` → 모든 점 `x → 1 - x` (새 배열)
+  - `palmPoint(lm)` → 랜드마크 5·9 중점 `{x, y}` (입력은 이미 거울 보정 좌표)
+  - `STALE_MS = 500`, `isStale(nowMs, lastAdvanceMs)` → 프레임 정지 판정
+- **프레임 정지·잘린 입력 방어**: 비디오 `currentTime`이 `STALE_MS` 넘게 전진하지
+  않으면(트랙 종료·뮤트·카메라 점유) `landmarks()`는 `[]`, `hands()`는 `n: 0`으로
+  비운다. 21점 미만 손 배열은 `palmPoint` 전에 버린다.
 
 ### js/main.js — 소폭 수정
 
@@ -181,12 +184,10 @@ if (flash > 0) flash -= dt;
 세션이 동일한 `js/cam.js`·`#v-cam`·`work.cam`·`opts.cam`을 정의하고 있어, 01번
 세션의 요청으로 공용 부분을 아래처럼 맞춘다. 이 절은 조율 결과가 바뀌면 갱신한다.
 
-- **소유권**: 10번 브랜치의 구현 계획(Task 2)이 이미 `cam.js` + 셸 배선을 담고
-  있으므로 10번이 공용 계층을 구현하고, 03번은 그 커밋을 merge한 뒤 03 전용
-  부분만 구현한다(제안 — 10번 세션 확인 시 확정). 03 전용 순수 함수(`handWind`·
-  `pinchStep`·`pinchRatio`)와 테스트는 인터페이스에만 의존하므로 merge 전에 병행
-  진행한다. 10번 커밋이 늦어지면 03번이 구현하고 10번이 merge한다 — 어느 쪽이든
-  아래 계약을 따른다.
+- **소유권(확정)**: 10번 세션이 `cam.js` + 셸 배선 초안(`feature/babel-camera`
+  @02eb1c0)을 남기고 종료되어, 사용자 결정으로 03번 세션이 그 위에 계약 수정을
+  맡았다. 수정은 `feature/cam-contract`에서 커밋 후 `feature/babel-camera`로
+  fast-forward(298b19c). 01·10·11번은 이 해시를 merge한다.
 - **작품 중립 문구**: 대기 "📷 카메라로 체험하기" · 활성 "📷 손을 비춰보세요" ·
   실패 "카메라를 사용할 수 없어요 — 마우스로 체험하세요". 작품별 제스처 설명은
   버튼이 아니라 각 작품의 `hint`에 둔다.
