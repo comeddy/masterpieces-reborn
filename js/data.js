@@ -25,8 +25,9 @@ export const WORKS = [
   {
     no: "03", wing: "wave", title: "After Vermeer — Girl with a Pearl Earring", ko: "진주 귀걸이를 한 소녀",
     medium: "Light-dust particles · after Vermeer (c.1665, public domain)", year: "2026",
-    note: "페르메이르의 소녀가 어둠 속 빛 먼지로 나타난다. 촛불 바람에 먼지가 흩날려도 소녀는 언제나 되돌아오는데 — 진주만은 늘 마지막에, 가장 밝게 돌아온다. 어둠이 깊을수록 빛나는 단 하나의 점.",
-    hint: "드래그로 빛 먼지를 흩으세요 · 클릭으로 촛불 깜빡임",
+    note: "페르메이르의 소녀가 어둠 속 빛 먼지로 나타난다. 촛불 바람에 먼지가 흩날려도 소녀는 언제나 되돌아오는데 — 진주만은 늘 마지막에, 가장 밝게 돌아온다. 어둠이 깊을수록 빛나는 단 하나의 점. 카메라 앞에서 손을 움직이면 그 손이 촛불이 되고, 손끝을 맞대면 불꽃이 흔들린다.",
+    hint: "📷를 켜고 손을 촛불처럼 움직여 빛 먼지를 흩으세요 · 손끝을 맞대면 촛불이 깜빡입니다 · 마우스로도 가능합니다",
+    cam: true,
     module: "./pieces/03-pearl-earring.js", asset: "assets/targets/03-pearl-earring.jpg",
   },
   {
