@@ -44,3 +44,14 @@ test("mic 플래그는 boolean이며 현재는 09번에만 있다", () => {
   }
   assert.deepEqual(WORKS.filter(w => w.mic).map(w => w.no), ["09"]);
 });
+
+test("handPointer 플래그는 boolean이며, 켜진 작품은 cam도 켜져 있다(버튼 없이는 도달 불가)", () => {
+  for (const w of WORKS) {
+    if ("handPointer" in w) {
+      assert.equal(typeof w.handPointer, "boolean", `${w.no}.handPointer 타입`);
+      if (w.handPointer) assert.equal(w.cam, true, `${w.no}: handPointer는 cam: true가 필요`);
+    }
+    if ("cam" in w) assert.equal(typeof w.cam, "boolean", `${w.no}.cam 타입`);
+  }
+  assert.ok(WORKS.some((w) => w.handPointer), "handPointer 작품이 하나는 있다");
+});

@@ -11,8 +11,9 @@ export const WORKS = [
   {
     no: "01", wing: "wave", title: "After Hokusai — Great Wave", ko: "가나가와 해변의 높은 파도",
     medium: "Particle fluid · after Hokusai (c.1831, public domain)", year: "2026",
-    note: "호쿠사이의 파도가 수천 개의 물 입자로 다시 태어난다. 갈고리 같은 물보라는 주기적으로 스스로 부서져 포말로 흩어지고, 후지산은 그 너머에서 미동도 없다. 손으로 휘저으면 파도는 무너졌다가 — 다시 그 불멸의 형상으로 되돌아온다.",
-    hint: "드래그로 물을 휘저으세요 · 클릭으로 물보라 · 파도는 스스로도 부서집니다",
+    note: "호쿠사이의 파도가 수천 개의 물 입자로 다시 태어난다. 갈고리 같은 물보라는 주기적으로 스스로 부서져 포말로 흩어지고, 후지산은 그 너머에서 미동도 없다. 손으로 휘저으면 파도는 무너졌다가 — 다시 그 불멸의 형상으로 되돌아온다. 카메라 앞에서 펼친 손으로 물을 휘저으세요, 주먹을 쥐었다 펼치면 물보라가 튀다.",
+    hint: "📷를 켜고 손을 펼쳐 물을 휘저으세요 · 주먹을 쥐었다 펼치면 물보라 · 마우스로도 가능합니다",
+    cam: true, handPointer: true,
     module: "./pieces/01-great-wave.js", asset: "assets/targets/01-great-wave.jpg",
   },
   {
