@@ -14,7 +14,7 @@
 
 - 의존성 추가 금지(npm 패키지 0개). MediaPipe는 `cam.js`의 `request()` 안에서만 동적 `import()`.
 - 모든 작품 모듈과 `cam.js`는 node에서 import-safe(모듈 레벨에서 브라우저 API 미참조) — `test/integrity.test.mjs`가 강제.
-- 작업 디렉터리: **두 worktree**를 쓴다. 공용 계층(Task 1~3)은 `/home/ec2-user/media-art2/.worktrees/babel-camera`(브랜치 `feature/babel-camera`), 03번(Task 4~8)은 `/home/ec2-user/media-art2/.worktrees/pearl-camera`(브랜치 `feature/pearl-camera`). 메인 체크아웃 `/home/ec2-user/media-art2`에서는 `git checkout`·커밋 금지(다른 세션이 HEAD 공유). bare `git stash` 금지.
+- 작업 디렉터리: **두 worktree**를 쓴다. 공용 계층(Task 1~3)은 `/home/ec2-user/media-art2/.worktrees/cam-contract`(브랜치 `feature/babel-camera`), 03번(Task 4~8)은 `/home/ec2-user/media-art2/.worktrees/pearl-camera`(브랜치 `feature/pearl-camera`). 메인 체크아웃 `/home/ec2-user/media-art2`에서는 `git checkout`·커밋 금지(다른 세션이 HEAD 공유). bare `git stash` 금지.
 - 📷 버튼 문구(작품 중립, 정확히 이 문자열): 대기 `📷 카메라로 체험하기` · 요청 중 `📷 카메라 준비 중…` · 활성 `📷 손을 비춰보세요` · 실패 `카메라를 사용할 수 없어요 — 마우스로 체험하세요`.
 - `landmarks()`·`hands()` 좌표계: **거울 보정 후**(x는 1-x) 0..1 정규화. 주 손은 `landmarks()[0]`.
 - `test/data.test.mjs`의 `cam` 플래그 검사는 `typeof boolean`만(번호 목록 하드코딩 금지).
@@ -44,19 +44,21 @@
 
 **Files:** 없음(git 메타만)
 
-- [ ] **Step 1: babel worktree 생성**
+- [ ] **Step 1: 공용 수정용 브랜치·worktree 생성**
+
+`feature/babel-camera`는 다른 세션의 worktree(`.worktrees/babel-camera`)에 체크아웃돼 있어 같은 브랜치를 두 곳에서 열 수 없다. babel 끝에서 새 브랜치 `feature/cam-contract`를 따서 전용 worktree에서 작업하고, Task 3 끝에 babel로 fast-forward한다.
 
 Run:
 ```bash
-cd /home/ec2-user/media-art2 && git worktree add .worktrees/babel-camera feature/babel-camera && git -C .worktrees/babel-camera log --oneline -1
+cd /home/ec2-user/media-art2 && git worktree add -b feature/cam-contract .worktrees/cam-contract feature/babel-camera && git -C .worktrees/cam-contract log --oneline -1
 ```
-Expected: `d8729de test: E2E용 가짜 MediaPipe 번들 …` (이미 존재하면 `git worktree list`로 경로만 확인)
+Expected: `02eb1c0 fix: 10번 탑 높이 상한 MAX_TIERS=40 …` (babel 끝이 더 진행됐으면 그 해시 — 무관). 10번 피스 행 번호는 이 커밋 기준 근사치이므로 함수명으로 찾는다.
 
 - [ ] **Step 2: 두 worktree 기준 테스트**
 
 Run:
 ```bash
-cd /home/ec2-user/media-art2/.worktrees/babel-camera && node --test test/ 2>&1 | tail -4
+cd /home/ec2-user/media-art2/.worktrees/cam-contract && node --test test/ 2>&1 | tail -4
 cd /home/ec2-user/media-art2/.worktrees/pearl-camera && node --test test/ 2>&1 | tail -4
 ```
 Expected: 두 곳 모두 `# fail 0`
@@ -76,7 +78,7 @@ Expected: 두 곳 모두 `# fail 0`
 
 Run:
 ```bash
-cd /home/ec2-user/media-art2/.worktrees/babel-camera && git cherry-pick c4138c7 && git show --stat --oneline HEAD | head -5
+cd /home/ec2-user/media-art2/.worktrees/cam-contract && git cherry-pick c4138c7 && git show --stat --oneline HEAD | head -5
 ```
 Expected: `index.html | 2 +-`, `js/main.js | 8 ++++----`. 충돌 시 `git cherry-pick --abort` 후 아래 문자열로 수동 수정: `CAM_LABEL = "📷 카메라로 체험하기"`, 활성 `"📷 손을 비춰보세요"`, 실패 `"카메라를 사용할 수 없어요 — 마우스로 체험하세요"`, `index.html` 버튼 텍스트 `📷 카메라로 체험하기`.
 
@@ -84,32 +86,31 @@ Expected: `index.html | 2 +-`, `js/main.js | 8 ++++----`. 충돌 시 `git cherry
 
 Run:
 ```bash
-cd /home/ec2-user/media-art2/.worktrees/babel-camera && grep -n "📷\|카메라를 사용할 수 없어요" js/main.js index.html
+cd /home/ec2-user/media-art2/.worktrees/cam-contract && grep -n "📷\|카메라를 사용할 수 없어요" js/main.js index.html
 ```
 Expected: 4개 문구가 Global Constraints와 정확히 일치. `쌓기`·`붕괴`·`클릭으로 체험` 문자열은 `main.js`·`index.html`에 없음.
 
 - [ ] **Step 3: data.test를 boolean-only로 수정**
 
-`test/data.test.mjs`의 기존 cam 테스트(`"cam 플래그는 boolean이며 현재는 10번에만 있다"`) 블록 전체를 다음으로 교체:
+`test/data.test.mjs`의 기존 cam 테스트(`"cam 플래그는 boolean이며 현재는 10번에만 있다"`) 블록 전체를 다음으로 교체. **글자 하나까지 아래와 동일하게** — 01번(480e394)·11번 브랜치가 같은 텍스트를 넣어 master 병합 시 자동 합쳐진다:
 
 ```js
-test("cam 플래그는 있으면 boolean이다 (여러 작품이 켤 수 있음)", () => {
+test("cam 플래그는 boolean이다", () => {
   for (const w of WORKS) {
     if ("cam" in w) assert.equal(typeof w.cam, "boolean", `${w.no}.cam 타입`);
   }
-  assert.ok(WORKS.some((w) => w.cam === true), "cam 작품이 하나는 있다");
 });
 ```
 
 - [ ] **Step 4: 테스트**
 
-Run: `cd /home/ec2-user/media-art2/.worktrees/babel-camera && node --test test/ 2>&1 | tail -4`
+Run: `cd /home/ec2-user/media-art2/.worktrees/cam-contract && node --test test/ 2>&1 | tail -4`
 Expected: `# fail 0`
 
 - [ ] **Step 5: 커밋**
 
 ```bash
-cd /home/ec2-user/media-art2/.worktrees/babel-camera && git add test/data.test.mjs && git commit -m "$(cat <<'EOF'
+cd /home/ec2-user/media-art2/.worktrees/cam-contract && git add test/data.test.mjs && git commit -m "$(cat <<'EOF'
 test: cam 플래그 검사를 boolean-only로 — 01·03·11번도 cam: true가 되므로 번호 고정 제거
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
@@ -168,7 +169,7 @@ test("palmPoint: 랜드마크 5·9의 중점", () => {
 
 - [ ] **Step 2: 실패 확인**
 
-Run: `cd /home/ec2-user/media-art2/.worktrees/babel-camera && node --test test/cam.test.mjs 2>&1 | tail -6`
+Run: `cd /home/ec2-user/media-art2/.worktrees/cam-contract && node --test test/cam.test.mjs 2>&1 | tail -6`
 Expected: FAIL — `mirrorLandmarks`/`palmPoint` export 없음(SyntaxError: does not provide an export named …)
 
 - [ ] **Step 3: cam.js 수정**
@@ -228,13 +229,13 @@ export function landmarks() { detect(); return lmarks; }
 
 - [ ] **Step 5: 테스트**
 
-Run: `cd /home/ec2-user/media-art2/.worktrees/babel-camera && node --test test/ 2>&1 | tail -4`
+Run: `cd /home/ec2-user/media-art2/.worktrees/cam-contract && node --test test/ 2>&1 | tail -4`
 Expected: `# fail 0` (cam.test 3개 추가 통과, integrity의 import-safe 검사 통과)
 
 - [ ] **Step 6: 커밋**
 
 ```bash
-cd /home/ec2-user/media-art2/.worktrees/babel-camera && git add js/cam.js js/pieces/10-tower-of-babel.js test/cam.test.mjs && git commit -m "$(cat <<'EOF'
+cd /home/ec2-user/media-art2/.worktrees/cam-contract && git add js/cam.js js/pieces/10-tower-of-babel.js test/cam.test.mjs && git commit -m "$(cat <<'EOF'
 feat: cam.js landmarks 거울 보정·프레임당 1회 탐지 공용화 — mirrorLandmarks/palmPoint 순수 헬퍼 + 테스트
 
 세션 간 계약: hands()·landmarks() 모두 거울 보정 후 좌표, 어느 쪽이 먼저 불려도
@@ -311,10 +312,10 @@ function drawCamMirror() {
 
 - [ ] **Step 4: 테스트 + 10번 E2E 스모크**
 
-Run: `cd /home/ec2-user/media-art2/.worktrees/babel-camera && node --test test/ 2>&1 | tail -4`
+Run: `cd /home/ec2-user/media-art2/.worktrees/cam-contract && node --test test/ 2>&1 | tail -4`
 Expected: `# fail 0`
 
-Run(백그라운드): `python3 -m http.server 8093 --bind 127.0.0.1 -d /home/ec2-user/media-art2/.worktrees/babel-camera`
+Run(백그라운드): `python3 -m http.server 8093 --bind 127.0.0.1 -d /home/ec2-user/media-art2/.worktrees/cam-contract`
 Playwright: `http://127.0.0.1:8093/` → 버튼 클릭 전 `browser_evaluate`:
 ```js
 window.__CAM_CDN__ = "/test/fixtures/fake-vision";
@@ -329,14 +330,21 @@ Expected: 버튼 텍스트 `📷 손을 비춰보세요`; 호박색 손 커서�
 - [ ] **Step 5: 커밋 + 피어 통지**
 
 ```bash
-cd /home/ec2-user/media-art2/.worktrees/babel-camera && git add js/cam.js js/main.js js/pieces/10-tower-of-babel.js && git commit -m "$(cat <<'EOF'
+cd /home/ec2-user/media-art2/.worktrees/cam-contract && git add js/cam.js js/main.js js/pieces/10-tower-of-babel.js && git commit -m "$(cat <<'EOF'
 feat: cam.js drawMirror 공용 헬퍼 — 코너 미러 렌더를 작품 밖으로, opts.cam.drawMirror 노출
 
 Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>
 EOF
 )" && git log --oneline -4
 ```
-그 다음 컨트롤러(메인 세션)가 `SendMessage`로 `media-art2-1c`·`media-art2-09`에 "feature/babel-camera 공용 계층 수정 완료 — 최신 해시 `<hash>`(Task 1~3 커밋 4개: c4138c7 cherry-pick, data.test boolean-only, landmarks 거울 보정·1회 탐지, drawMirror). landmarks()는 이제 거울 보정 후 좌표."를 전달한다.
+- [ ] **Step 6: babel 브랜치로 fast-forward (컨트롤러 수행)**
+
+```bash
+cd /home/ec2-user/media-art2/.worktrees/babel-camera && git status --short && git merge --ff-only feature/cam-contract && git log --oneline -1
+```
+Expected: `status` 출력 없음(다른 세션의 미커밋 변경 없음) 후 ff 성공, babel 끝 = cam-contract 끝. **status가 비어 있지 않거나 ff가 거부되면 시도하지 않고** 피어에게 `feature/cam-contract`를 merge 대상으로 안내한다(babel을 포함하므로 동등).
+
+그 다음 컨트롤러(메인 세션)가 `SendMessage`로 `media-art2-1c`·`media-art2-09`에 "공용 계층 수정 완료 — 브랜치 `feature/cam-contract`(babel ff 성공 시 `feature/babel-camera`도 동일) 최신 해시 `<hash>`(Task 1~3 커밋 4개: c4138c7 cherry-pick, data.test boolean-only, landmarks 거울 보정·1회 탐지, drawMirror). landmarks()는 이제 거울 보정 후 좌표."를 전달한다.
 
 ---
 
@@ -354,9 +362,9 @@ EOF
 
 Run:
 ```bash
-cd /home/ec2-user/media-art2/.worktrees/pearl-camera && git merge --no-edit feature/babel-camera && git log --oneline -3 && node --test test/ 2>&1 | tail -4
+cd /home/ec2-user/media-art2/.worktrees/pearl-camera && git merge --no-edit feature/cam-contract && git log --oneline -3 && node --test test/ 2>&1 | tail -4
 ```
-Expected: 충돌 없음(pearl에는 docs 커밋만 있음), `# fail 0`.
+Expected: 충돌 없음(pearl에는 docs 커밋만 있음), `# fail 0`. (`feature/cam-contract`는 babel 전체 + Task 1~3 수정을 포함한다.)
 
 - [ ] **Step 2: data.js 03번 항목 수정**
 
