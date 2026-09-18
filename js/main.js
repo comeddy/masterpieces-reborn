@@ -142,6 +142,7 @@ function snapshotPointer(dt) {
 // 비교해 판별한다 — cam.js가 좌표계를 바꿔도 손이 반대로 움직이는 회귀가 생기지 않는다.
 const handCursor = $("#hand-cursor");
 let handState = makePointerState();
+let handWarned = false;   // 활성화당 1회만 경고 로그
 let stageW = 0, stageH = 0;   // sizeCanvas()의 CSS px — 합성 좌표 범위
 
 function landmarksMirrored(h, lm) {
@@ -155,12 +156,19 @@ function synthesizeHand(dt) {
     pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
     return false;
   }
-  const h = cam.hands();                                  // 이 프레임의 추론 트리거(1회 캐시는 cam.js 보장)
-  const lm = cam.landmarks();
-  const primary = lm && lm[0];
-  const sample = primary && primary.length >= 21
-    ? sampleFromLandmarks(primary, landmarksMirrored(h, primary)) : null;
-  return applyHand(pointer, sample, handState, dt, stageW, stageH);
+  // 검출 예외는 그 프레임만 건너뛰고 마우스 폴백 — rAF 루프를 죽이지 않는다.
+  try {
+    const h = cam.hands();                                  // 이 프레임의 추론 트리거(1회 캐시는 cam.js 보장)
+    const lm = cam.landmarks();
+    const primary = lm && lm[0];
+    const sample = primary && primary.length >= 21
+      ? sampleFromLandmarks(primary, landmarksMirrored(h, primary)) : null;
+    return applyHand(pointer, sample, handState, dt, stageW, stageH);
+  } catch (err) {
+    pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
+    if (!handWarned) { handWarned = true; console.warn("손 인식 예외 — 이 프레임은 마우스로 폴백", err); }
+    return false;
+  }
 }
 
 function updateHandCursor(owns) {
@@ -263,7 +271,7 @@ async function closeWork() {
   micReqSeq++; // 대기 중인 마이크 권한 요청의 늦은 완료를 무효화
   mic.stop(); resetMicBtn(); micBtn.hidden = true;
   camReqSeq++; cam.stop(); resetCamBtn(); camBtn.hidden = true;
-  handState = makePointerState(); handCursor.hidden = true;   // 합성 상태·링 커서 초기화
+  handState = makePointerState(); handCursor.hidden = true; handWarned = false;   // 합성 상태·링 커서 초기화
   current = -1;
   body.dataset.view = "atrium";
   $("#viewer").setAttribute("aria-hidden", "true");
