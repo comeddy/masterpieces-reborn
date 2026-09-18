@@ -1,6 +1,7 @@
 // js/main.js — 전시 셸: 아트리움 렌더, 뷰어, rAF 루프, 포인터 규약
 import { WINGS, WORKS, wingOf } from "./data.js";
 import * as mic from "./mic.js";
+import * as cam from "./cam.js";
 
 const $ = (sel) => document.querySelector(sel);
 const body = document.body;
@@ -37,6 +38,32 @@ micBtn.addEventListener("click", async () => {
   } else {
     micBtn.disabled = true; // 권한 거부/미지원: 커서 폴백 안내
     micBtn.textContent = "마이크를 사용할 수 없어요 — 커서로 체험하세요";
+  }
+});
+
+// ---------- 카메라 (cam: true 작품에서만 버튼 노출) ----------
+const camBtn = $("#v-cam");
+const CAM_LABEL = "📷 손으로 조종하기";
+function resetCamBtn() {
+  camBtn.setAttribute("aria-pressed", "false");
+  camBtn.disabled = false;
+  camBtn.textContent = CAM_LABEL;
+}
+let camReqSeq = 0; // 대기 중인 권한·모델 로드의 늦은 완료 무효화용
+camBtn.addEventListener("click", async () => {
+  if (cam.active()) { cam.stop(); resetCamBtn(); return; } // 토글 오프
+  const my = ++camReqSeq;
+  camBtn.disabled = true;
+  camBtn.textContent = "📷 카메라 준비 중…";               // 모델 ~10MB 로드 피드백
+  const ok = await cam.request();
+  if (my !== camReqSeq) return; // 대기 중 뷰어 닫힘/전환 — cam.js가 자원 정리함
+  camBtn.disabled = false;
+  if (ok) {
+    camBtn.setAttribute("aria-pressed", "true");
+    camBtn.textContent = "📷 한 손 쌓기 · 두 손 붕괴";
+  } else {
+    camBtn.disabled = true; // 권한 거부/미지원/CDN 실패: 클릭 폴백 안내
+    camBtn.textContent = "카메라를 사용할 수 없어요 — 클릭으로 체험하세요";
   }
 });
 
@@ -151,6 +178,7 @@ async function openWork(idx) {
   $("#v-note").textContent = work.note;
   $("#v-hint").textContent = work.hint;
   micBtn.hidden = !work.mic;
+  camBtn.hidden = !work.cam;
   $("#v-error").hidden = true;
 
   const { w, h } = sizeCanvas();
@@ -161,7 +189,9 @@ async function openWork(idx) {
     piece.init({ canvas, ctx, width: w, height: h,
                  assets: { target }, reducedMotion,
                  audio: { enabled: () => soundOn,
-                          mic: { active: () => mic.active(), level: () => mic.level() } } });
+                          mic: { active: () => mic.active(), level: () => mic.level() } },
+                 cam: { active: () => cam.active(), hands: () => cam.hands(),
+                        video: () => cam.video(), landmarks: () => cam.landmarks() } });
     lastT = performance.now();
     pointer.downTime = 0;
     rafId = requestAnimationFrame(frame);
@@ -194,6 +224,7 @@ async function closeWork() {
   piece = null;
   micReqSeq++; // 대기 중인 마이크 권한 요청의 늦은 완료를 무효화
   mic.stop(); resetMicBtn(); micBtn.hidden = true;
+  camReqSeq++; cam.stop(); resetCamBtn(); camBtn.hidden = true;
   current = -1;
   body.dataset.view = "atrium";
   $("#viewer").setAttribute("aria-hidden", "true");

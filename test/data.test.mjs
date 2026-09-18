@@ -55,3 +55,9 @@ test("handPointer 플래그는 boolean이며, 켜진 작품은 cam도 켜져 있
   }
   assert.ok(WORKS.some((w) => w.handPointer), "handPointer 작품이 하나는 있다");
 });
+
+test("cam 플래그는 boolean이다", () => {
+  for (const w of WORKS) {
+    if ("cam" in w) assert.equal(typeof w.cam, "boolean", `${w.no}.cam 타입`);
+  }
+});

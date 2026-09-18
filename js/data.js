@@ -80,8 +80,9 @@ export const WORKS = [
   {
     no: "10", wing: "dream", title: "After Bruegel — Tower of Babel", ko: "바벨탑",
     medium: "Endless construction · after Bruegel (1563, public domain)", year: "2026",
-    note: "브뤼헐의 바벨탑은 완성되지 못할 것을 알면서도 쌓아 올려진다. 벽돌은 저절로 한 장씩 놓이고, 당신은 클릭으로 건설을 거들 수도, 길게 눌러 무너뜨릴 수도 있다. 무너진 자리에서도 건설은 계속된다 — 인간의 끝없는 오만과 열망.",
-    hint: "클릭으로 벽돌을 쌓으세요 · 길게 누르면 무너집니다",
+    note: "브뤼헐의 바벨탑은 완성되지 못할 것을 알면서도 쌓아 올려진다. 벽돌은 저절로 한 장씩 놓이고, 당신은 클릭으로 건설을 거들 수도, 길게 눌러 무너뜨릴 수도 있다. 무너진 자리에서도 건설은 계속된다 — 인간의 끝없는 오만과 열망. 카메라 앞에 한 손을 들면 탑이 자라고, 두 손을 들면 무너진다.",
+    hint: "📷를 켜고 한 손으로 쌓고 두 손으로 무너뜨리세요 · 클릭으로도 가능합니다",
+    cam: true,
     module: "./pieces/10-tower-of-babel.js",
   },
   {
