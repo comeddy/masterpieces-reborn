@@ -357,7 +357,7 @@ Expected: `status` 출력 없음(다른 세션의 미커밋 변경 없음) 후 f
 - Modify: `test/cam.test.mjs` (append)
 
 **Interfaces:**
-- Produces: `export const STALE_MS = 500;` `export function isStale(nowMs, lastAdvanceMs)` → boolean (`nowMs - lastAdvanceMs > STALE_MS`). 동작: 비디오 프레임이 STALE_MS 이상 전진하지 않으면 `landmarks()`는 `[]`, `hands()`는 `n: 0`을 돌려준다(위치 x,y는 마지막 값 유지 — 기존 손 없음 규약과 동일).
+- Produces: `export const STALE_MS = 500;` `export function isStale(nowMs, lastAdvanceMs)` → boolean (`nowMs - lastAdvanceMs > STALE_MS`). `detect()`는 21점 미만 손 배열을 버린다. 동작: 비디오 프레임이 STALE_MS 이상 전진하지 않으면 `landmarks()`는 `[]`, `hands()`는 `n: 0`을 돌려준다(위치 x,y는 마지막 값 유지 — 기존 손 없음 규약과 동일).
 - Consumes: Task 2의 `detect()`·`lmarks`·`last`.
 
 - [ ] **Step 1: 실패하는 테스트 추가** — `test/cam.test.mjs` import 행을 `import { mirrorLandmarks, palmPoint, STALE_MS, isStale } from "../js/cam.js";`로 바꾸고 끝에 append:
@@ -383,7 +383,7 @@ export const STALE_MS = 500;  // 비디오 프레임이 이만큼 전진하지 �
 export function isStale(nowMs, lastAdvanceMs) { return nowMs - lastAdvanceMs > STALE_MS; }
 ```
 (b) 모듈 상태에 `let lastAdvanceMs = 0;` 추가(`lastVT` 옆). `request()` 성공 시 초기화 블록(`lastVT = -1; lmarks = []; …`)에 `lastAdvanceMs = performance.now();` 추가. `stop()`의 초기화에도 `lastAdvanceMs = 0;` 추가.
-(c) `detect()`를 다음으로 교체(기존 본문의 탐지·예외 처리는 그대로, 전진 판정과 노후 비우기만 추가):
+(c) `detect()`를 다음으로 교체(기존 본문의 탐지·예외 처리는 그대로, 전진 판정·노후 비우기·21점 미만 손 필터만 추가 — 11번 리뷰 지적):
 ```js
 function detect() {
   if (!active() || vid.readyState < 2) return;
@@ -397,7 +397,8 @@ function detect() {
   let res;
   try { res = landmarker.detectForVideo(vid, nowMs); }
   catch (e) { if (!detect.warned) { detect.warned = true; console.warn("손 탐지 실패 — 직전 결과 유지", e); } return; }
-  lmarks = mirrorLandmarks(res.landmarks || []);
+  // 잘린 랜드마크 배열 방어: 21점 미만 손은 버린다(palmPoint가 5·9를 인덱싱)
+  lmarks = mirrorLandmarks((res.landmarks || []).filter((lm) => lm && lm.length >= 21));
   if (lmarks.length) {
     const p = palmPoint(lmarks[0]);
     last = { n: Math.min(2, lmarks.length), x: p.x, y: p.y };
@@ -484,7 +485,7 @@ EOF
 - Create: `test/pearl-gesture.test.mjs`
 
 **Interfaces:**
-- Produces: `export const WIND_MIN = 0.15, WIND_FULL = 0.9, HAND_SMOOTH = 18;` `export function makeHandState()` → `{ x: 0, y: 0, seen: false }`. `export function handWind(s, hx, hy, dt)` → `{ x, y, k } | null` (x,y는 정규화 0..1 스무딩 위치, k는 0..1 바람 세기). `hx`가 `null`이면 손 없음.
+- Produces: `export const WIND_MIN = 0.15, WIND_FULL = 0.9, HAND_SMOOTH = 18;` `export function makeHandState()` → `{ x: 0, y: 0, seen: false }`. `export function handWind(s, hx, hy, dt)` → `{ x, y, k } | null` (x,y는 정규화 0..1 스무딩 위치, k는 0..1 바람 세기). `hx`/`hy`가 유한수가 아니면(null·undefined·NaN) 손 없음.
 - Consumes: 없음.
 
 - [ ] **Step 1: 실패하는 테스트 작성** — `test/pearl-gesture.test.mjs`
@@ -508,6 +509,13 @@ test("handWind: 손이 없으면 null이고 seen이 풀린다", () => {
   handWind(s, 0.5, 0.5, DT);
   assert.equal(s.seen, true);
   assert.equal(handWind(s, null, null, DT), null);
+  assert.equal(s.seen, false);
+});
+
+test("handWind: NaN 좌표는 손 없음으로 취급한다 (NaN이 스프링에 스며들지 않게)", () => {
+  const s = makeHandState();
+  handWind(s, 0.5, 0.5, DT);
+  assert.equal(handWind(s, NaN, 0.5, DT), null);
   assert.equal(s.seen, false);
 });
 
@@ -566,7 +574,7 @@ export function makeHandState() { return { x: 0, y: 0, seen: false }; }
 
 // 반환: { x, y, k } (스무딩 위치·세기 0..1) 또는 null(손 없음·첫 등장·임계 미만)
 export function handWind(s, hx, hy, dt) {
-  if (hx === null || hx === undefined) { s.seen = false; return null; }
+  if (!Number.isFinite(hx) || !Number.isFinite(hy)) { s.seen = false; return null; } // null·undefined·NaN 모두 손 없음
   if (!s.seen) { s.x = hx; s.y = hy; s.seen = true; return null; } // 점프 속도 방지
   const px = s.x, py = s.y;
   const a = Math.min(1, HAND_SMOOTH * dt);
