@@ -2,7 +2,7 @@
 import { WINGS, WORKS, wingOf } from "./data.js";
 import * as mic from "./mic.js";
 import * as cam from "./cam.js";
-import { palmCenter, sampleFromLandmarks, makePointerState, applyHand } from "./hand-pointer.js";
+import { sampleFromLandmarks, makePointerState, applyHand, detectMirrored } from "./hand-pointer.js";
 
 const $ = (sel) => document.querySelector(sel);
 const body = document.body;
@@ -138,17 +138,13 @@ function snapshotPointer(dt) {
 
 // ---------- 손 → 포인터 합성 (handPointer: true 작품) ----------
 // cam.js 계약: hands().x는 항상 거울 보정(1 − 원본)이지만 landmarks()의 좌표계는 구현에 따라
-// 원본일 수도, 보정 후일 수도 있다. 상수로 고정하지 않고 매 프레임 hands().x와 손바닥 중심을
-// 비교해 판별한다 — cam.js가 좌표계를 바꿔도 손이 반대로 움직이는 회귀가 생기지 않는다.
+// 원본일 수도, 보정 후일 수도 있다. detectMirrored(순수 모듈)가 손이 중앙에서 벗어난 첫 프레임에
+// hands().x와 손바닥 중심을 비교해 한 번 판별하고 래치한다 — cam.js가 좌표계를 바꿔도 손이
+// 반대로 움직이는 회귀가 생기지 않는다.
 const handCursor = $("#hand-cursor");
 let handState = makePointerState();
 let handWarned = false;   // 활성화당 1회만 경고 로그
 let stageW = 0, stageH = 0;   // sizeCanvas()의 CSS px — 합성 좌표 범위
-
-function landmarksMirrored(h, lm) {
-  const cx = palmCenter(lm).x;
-  return Math.abs(h.x - cx) <= Math.abs(h.x - (1 - cx));   // 보정 후 좌표면 hands().x가 중심과 가깝다
-}
 
 function synthesizeHand(dt) {
   const work = WORKS[current];
@@ -161,8 +157,7 @@ function synthesizeHand(dt) {
     const h = cam.hands();                                  // 이 프레임의 추론 트리거(1회 캐시는 cam.js 보장)
     const lm = cam.landmarks();
     const primary = lm && lm[0];
-    const sample = primary && primary.length >= 21
-      ? sampleFromLandmarks(primary, landmarksMirrored(h, primary)) : null;
+    const sample = sampleFromLandmarks(primary, detectMirrored(handState, h && h.x, primary));
     return applyHand(pointer, sample, handState, dt, stageW, stageH);
   } catch (err) {
     pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;

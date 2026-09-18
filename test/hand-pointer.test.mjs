@@ -191,3 +191,54 @@ test("상수는 스펙 값과 같다", () => {
   assert.equal(OPEN_ON, 0.5); assert.equal(OPEN_OFF, 0.3); assert.equal(LOST_GRACE, 0.4);
   assert.equal(REACH, 0.15); assert.equal(SMOOTH, 14);
 });
+
+import { detectMirrored, MIRROR_MARGIN } from "../js/hand-pointer.js";
+
+test("makePointerState().mirrored는 null이다(거울 판별 미확정)", () => {
+  assert.equal(makePointerState().mirrored, null);
+});
+
+test("detectMirrored: 중앙에서 벗어난 손 + 원본 좌표(handX = 1−cx)는 false로 판정·래치한다", () => {
+  const lm = mkHand(0.3, 0.5, 1.8);
+  const cx = palmCenter(lm).x;
+  assert.ok(Math.abs(cx - 0.5) > MIRROR_MARGIN, "중앙에서 충분히 벗어나야 함");
+  const state = makePointerState();
+  assert.equal(detectMirrored(state, 1 - cx, lm), false);
+  assert.equal(state.mirrored, false);
+});
+
+test("detectMirrored: 중앙에서 벗어난 손 + 보정 후 좌표(handX = cx)는 true로 판정·래치한다", () => {
+  const lm = mkHand(0.3, 0.5, 1.8);
+  const cx = palmCenter(lm).x;
+  const state = makePointerState();
+  assert.equal(detectMirrored(state, cx, lm), true);
+  assert.equal(state.mirrored, true);
+});
+
+test("detectMirrored: 손이 중앙(|cx−0.5| ≤ MIRROR_MARGIN)이면 판정을 보류해 false를 반환하고 래치하지 않는다", () => {
+  const lm = mkHand(0.5, 0.5, 1.8);
+  const cx = palmCenter(lm).x;
+  assert.ok(Math.abs(cx - 0.5) <= MIRROR_MARGIN, "중앙 판정 전제");
+  const state = makePointerState();
+  assert.equal(detectMirrored(state, 0.5, lm), false);
+  assert.equal(state.mirrored, null);
+});
+
+test("detectMirrored: 벗어난 첫 프레임에 래치되면 이후 중앙 근처 프레임에서도 래치값을 유지한다", () => {
+  const off = mkHand(0.3, 0.5, 1.8);
+  const cx = palmCenter(off).x;
+  const state = makePointerState();
+  assert.equal(detectMirrored(state, cx, off), true);          // 벗어난 첫 프레임 → true로 래치
+  const center = mkHand(0.5, 0.5, 1.8);
+  assert.equal(detectMirrored(state, 0.5, center), true, "래치 후에는 중앙 프레임도 래치값 유지");
+});
+
+test("detectMirrored: 잘못된 landmarks(빈 배열·undefined·handX 비수치)는 false, 래치하지 않는다", () => {
+  const state = makePointerState();
+  assert.equal(detectMirrored(state, 0.5, []), false);
+  assert.equal(state.mirrored, null);
+  assert.equal(detectMirrored(state, 0.5, undefined), false);
+  assert.equal(state.mirrored, null);
+  assert.equal(detectMirrored(state, undefined, mkHand(0.3, 0.5, 1.8)), false);
+  assert.equal(state.mirrored, null);
+});
