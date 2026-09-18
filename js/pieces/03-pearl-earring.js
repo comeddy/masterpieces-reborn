@@ -150,7 +150,6 @@ export default {
     drawParticles();
     drawPearls();
     drawHandCursor();
-    drawMirror();
   },
 
   resize(w, h) {
@@ -382,13 +381,6 @@ function drawHandCursor() {
     ctx.beginPath(); ctx.arc(cursor.x, cursor.y, r + t * 40, 0, Math.PI * 2); ctx.stroke();
   }
   ctx.restore();
-}
-
-// --- 코너 미러: 우하단, 렌더는 공용 cam.drawMirror --------------------
-function drawMirror() {
-  if (!cam || !cam.active() || !cam.drawMirror) return;
-  const mw = Math.min(200, W * 0.18), mh = mw * 0.75;   // 640×480 비율
-  cam.drawMirror(ctx, { x: W - mw - 18, y: H - mh - 18, w: mw, h: mh });
 }
 
 function clamp255(v) {
