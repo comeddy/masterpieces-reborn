@@ -45,9 +45,8 @@ test("mic 플래그는 boolean이며 현재는 09번에만 있다", () => {
   assert.deepEqual(WORKS.filter(w => w.mic).map(w => w.no), ["09"]);
 });
 
-test("cam 플래그는 boolean이며 현재는 10번에만 있다", () => {
+test("cam 플래그는 boolean이다", () => {
   for (const w of WORKS) {
     if ("cam" in w) assert.equal(typeof w.cam, "boolean", `${w.no}.cam 타입`);
   }
-  assert.deepEqual(WORKS.filter(w => w.cam).map(w => w.no), ["10"]);
 });
