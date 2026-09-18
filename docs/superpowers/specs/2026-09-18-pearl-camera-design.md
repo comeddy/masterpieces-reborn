@@ -173,8 +173,9 @@ if (flash > 0) flash -= dt;
   - `drawHandCursor()`: `cursor`가 있으면 촛불색 글로우 점(`lighter` 합성,
     `rgba(255,200,120,α)` 방사 그라디언트, 반경 12px). `cursor`가 있고
     `flash > 0`이면 `(1 − flash/0.25)`에 비례해 커지며 옅어지는 링을 겹쳐 그린다.
-  - `cam.drawMirror(ctx, mirrorRect())`: 우하단, `w = min(200, W·0.18)`,
-    `h = w·0.75`, 여백 18px. `.viewer__info`(좌하단)와 겹치지 않는다.
+  - ~~`cam.drawMirror(ctx, mirrorRect())`: 우하단 코너 미러~~ — **2026-09-18 사용자
+    피드백으로 제거**(03·10번 모두, 커밋 cc76b26). 카메라 영상은 화면에 표시하지 않고
+    손 커서 글로우만 피드백으로 남긴다. 공용 `cam.drawMirror`는 `cam.js`에 유지.
 - 마우스 경로(`ptr` 블록)는 **무변경**. 두 입력이 같은 프레임에 파동을 일으키면
   나중에 쓴 `waveOrigin`이 이긴다 — 의도된 단순화.
 
