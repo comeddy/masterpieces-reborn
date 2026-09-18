@@ -23,6 +23,39 @@ const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const TAU = Math.PI * 2;
 
+// ── 손 추적 순수 계산부 (export — node:test 대상, 브라우저 API 미참조) ────────
+// pt는 공용 cam.hands()의 주 손 좌표 {x,y}(거울 보정 후 0..1) 또는 null(손 없음).
+// 위치는 EMA 스무딩, 속도는 스무딩 위치의 차분을 다시 EMA(정규화 단위/초).
+// present는 PRESENT_AFTER초 연속 검출 후 켜지고 LOST_AFTER초 연속 미검출 후 꺼진다(프레임 드랍 흡수).
+export const SMOOTH_RATE = 14, VEL_RATE = 10, PRESENT_AFTER = 0.05, LOST_AFTER = 0.35;
+
+export function makeHandTrack() {
+  return { present: false, x: 0.5, y: 0.5, vx: 0, vy: 0, seenT: 0, lostT: 0, init: false };
+}
+
+export function handTrackStep(s, pt, dt) {
+  if (dt <= 0) return s;
+  const kv = 1 - Math.exp(-VEL_RATE * dt);
+  if (pt) {
+    if (!s.init || !s.present) {          // 첫 검출·부재 후 재등장: 옛 위치에서 날아오지 않도록 점프, 속도 0
+      s.x = pt.x; s.y = pt.y; s.vx = 0; s.vy = 0; s.init = true;
+    } else {
+      const k = 1 - Math.exp(-SMOOTH_RATE * dt);
+      const nx = s.x + (pt.x - s.x) * k, ny = s.y + (pt.y - s.y) * k;
+      s.vx += ((nx - s.x) / dt - s.vx) * kv;
+      s.vy += ((ny - s.y) / dt - s.vy) * kv;
+      s.x = nx; s.y = ny;
+    }
+    s.seenT += dt; s.lostT = 0;
+    if (s.seenT >= PRESENT_AFTER) s.present = true;
+  } else {
+    s.lostT += dt; s.seenT = 0;
+    s.vx -= s.vx * kv; s.vy -= s.vy * kv;   // 위치는 유지, 속도만 0으로 감쇠
+    if (s.lostT >= LOST_AFTER) s.present = false;
+  }
+  return s;
+}
+
 // ── 로그 나선 한 점 (미변형 기준 좌표) ─────────────────
 // b.cx,cy = 감김 중심, R0 = 시작 반지름, th0 = 시작각, dir = 감김 방향, k = 조임, span = 총 회전각
 function spiralPt(b, f) {
