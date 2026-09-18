@@ -137,10 +137,10 @@ function snapshotPointer(dt) {
 }
 
 // ---------- 손 → 포인터 합성 (handPointer: true 작품) ----------
-// cam.js 계약: hands().x는 항상 거울 보정(1 − 원본)이지만 landmarks()의 좌표계는 구현에 따라
-// 원본일 수도, 보정 후일 수도 있다. detectMirrored(순수 모듈)가 손이 중앙에서 벗어난 첫 프레임에
-// hands().x와 손바닥 중심을 비교해 한 번 판별하고 래치한다 — cam.js가 좌표계를 바꿔도 손이
-// 반대로 움직이는 회귀가 생기지 않는다.
+// cam.js 계약: hands().x·landmarks()는 모두 거울 보정 후 좌표(세션 중 불변)다. detectMirrored
+// (순수 모듈)는 미확정 동안 이 계약값(보정 후)을 기본으로 반환하고, 손이 중앙에서 벗어난 첫
+// 프레임에 hands().x와 손바닥 중심을 비교해 한 번 판별해 래치한다 — cam.js가 계약을 어기고
+// 원본 좌표를 내주는 회귀가 생겨도 손이 반대로 움직이지 않도록 잡아내는 안전망이다.
 const handCursor = $("#hand-cursor");
 let handState = makePointerState();
 let handWarned = false;   // 합성 상태·경고 플래그는 카메라가 꺼지면 초기화 — 재활성화마다 새로 시작

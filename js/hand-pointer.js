@@ -49,17 +49,19 @@ export function makePointerState() {
   return { seen: false, sx: 0, sy: 0, open: false, lostT: 0, downTime: 0, mirrored: null };
 }
 
-// cam.js의 landmarks() 좌표계 판별(래치). hands().x는 계약상 항상 거울 보정 후이므로 손바닥 중심 cx와
-// 비교해 보정 후(cx에 가깝다) / 원본(1−cx에 가깝다)을 가른다. 중앙 근처(|cx−0.5| ≤ MIRROR_MARGIN)에서는
+// cam.js의 landmarks() 좌표계 판별(래치). cam.js 계약은 거울 보정 후 좌표(세션 중 불변)이므로
+// 미확정·중앙 구간·무효 입력에서는 계약대로 보정 후(true)로 본다. 래치는 계약 위반(원본 좌표
+// 회귀)을 잡는 안전망 — hands().x는 계약상 항상 거울 보정 후이므로 손바닥 중심 cx와 비교해
+// 보정 후(cx에 가깝다) / 원본(1−cx에 가깝다)을 가른다. 중앙 근처(|cx−0.5| ≤ MIRROR_MARGIN)에서는
 // 두 후보가 비슷해 오판할 수 있어 판정하지 않고, 손이 충분히 벗어난 첫 프레임에 한 번 판정해 래치한다.
-// 미확정 동안은 원본(false)으로 본다. 래치는 makePointerState()로 상태가 초기화될 때 함께 풀린다.
+// 래치는 makePointerState()로 상태가 초기화될 때 함께 풀린다.
 export const MIRROR_MARGIN = 0.1;
 
 export function detectMirrored(state, handX, lm) {
   if (state.mirrored !== null) return state.mirrored;
-  if (!valid(lm) || typeof handX !== "number") return false;
+  if (!valid(lm) || typeof handX !== "number") return true;
   const cx = palmCenter(lm).x;
-  if (Math.abs(cx - 0.5) <= MIRROR_MARGIN) return false;
+  if (Math.abs(cx - 0.5) <= MIRROR_MARGIN) return true;
   state.mirrored = Math.abs(handX - cx) <= Math.abs(handX - (1 - cx));
   return state.mirrored;
 }

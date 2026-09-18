@@ -48,9 +48,9 @@ opt-in 한다(10번 같은 작품엔 영향 없음).
 - `landmarks(): Array<Array<{x, y, z}>>` — 감지된 손들의 21점(정규화 0..1). `[0]`이 주 손.
   손이 없으면 빈 배열. **좌표계는 원본(거울 보정 전)일 수도 보정 후일 수도 있다** — 셸이
   `hands().x`(계약상 항상 거울 보정)와 손바닥 중심 x를 비교해 판별하되, 중앙 ±0.1 구간에서는
-  두 후보가 비슷해 오판할 수 있어 판정을 보류하고, 손이 충분히 벗어난 첫 프레임에 한 번만
-  판정해 래치한다(카메라 재활성화 시 초기화). cam.js가 좌표계를 바꿔도 손 방향이 뒤집히는
-  회귀가 없다.
+  두 후보가 비슷해 오판할 수 있어 판정을 보류해 계약값(보정 후, true)으로 보고, 손이 충분히
+  벗어난 첫 프레임에 한 번만 판정해 래치한다(카메라 재활성화 시 초기화). cam.js가 좌표계를
+  바꿔도 손 방향이 뒤집히는 회귀가 없다.
 - 셸 배선(`#v-cam` 버튼, `work.cam` 노출 조건, `closeWork`의 `cam.stop()`, `opts.cam` getter)도
   그 브랜치가 가져온다. 01번은 `work.cam: true`로 버튼을 켜고 `work.handPointer: true`로 합성을 켠다.
 - 공용 문구는 작품 중립이어야 한다(활성 "📷 손을 비춰보세요", 실패 "카메라를 사용할 수
@@ -108,7 +108,7 @@ opt-in 한다(10번 같은 작품엔 영향 없음).
 
 - `import { sampleFromLandmarks, makePointerState, applyHand, detectMirrored } from "./hand-pointer.js"`.
 - `detectMirrored(handState, h.x, lm)`: 순수 모듈의 래치. 손이 중앙 ±0.1 안쪽이면 판정을 보류해
-  false를 반환하고, 벗어난 첫 프레임에 `|h.x − c.x| ≤ |h.x − (1 − c.x)|`(c = palmCenter)로 한 번
+  계약값인 보정 후(true)를 반환하고, 벗어난 첫 프레임에 `|h.x − c.x| ≤ |h.x − (1 − c.x)|`(c = palmCenter)로 한 번
   판정해 `handState.mirrored`에 래치한다. 이후에는 손이 다시 중앙에 와도 래치값을 그대로 쓴다.
 - 상태 `let handState = makePointerState(); let stageW = 0, stageH = 0;` — `sizeCanvas()` 결과를 보관
   (`openWork`·`resize`에서 갱신).

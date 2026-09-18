@@ -215,13 +215,25 @@ test("detectMirrored: 중앙에서 벗어난 손 + 보정 후 좌표(handX = cx)
   assert.equal(state.mirrored, true);
 });
 
-test("detectMirrored: 손이 중앙(|cx−0.5| ≤ MIRROR_MARGIN)이면 판정을 보류해 false를 반환하고 래치하지 않는다", () => {
+test("detectMirrored: 손이 중앙(|cx−0.5| ≤ MIRROR_MARGIN)이면 판정을 보류해 계약값(true=보정 후)을 반환하고 래치하지 않는다", () => {
   const lm = mkHand(0.5, 0.5, 1.8);
   const cx = palmCenter(lm).x;
   assert.ok(Math.abs(cx - 0.5) <= MIRROR_MARGIN, "중앙 판정 전제");
   const state = makePointerState();
-  assert.equal(detectMirrored(state, 0.5, lm), false);
+  assert.equal(detectMirrored(state, 0.5, lm), true);
   assert.equal(state.mirrored, null);
+});
+
+test("detectMirrored: 중앙 구간의 실제 카메라 상황(palm center ≈0.59)에서도 계약대로 보정 후(true)로 보아 sampleFromLandmarks가 1−cx가 아니라 cx를 그대로 쓴다", () => {
+  const lm = mkHand(0.58, 0.5, 1.8);   // fake-camera E2E와 같은 형태: cx가 밴드 안쪽(≈0.59)
+  const cx = palmCenter(lm).x;
+  assert.ok(Math.abs(cx - 0.5) <= MIRROR_MARGIN, "중앙 판정 전제(밴드 안쪽)");
+  const state = makePointerState();
+  const mirrored = detectMirrored(state, cx, lm);
+  assert.equal(mirrored, true);
+  const sample = sampleFromLandmarks(lm, mirrored);
+  assert.ok(Math.abs(sample.x - cx) < 1e-9, `sample.x=${sample.x} expected cx=${cx}`);
+  assert.ok(Math.abs(sample.x - (1 - cx)) > 1e-6, "1−cx와는 달라야 한다");
 });
 
 test("detectMirrored: 벗어난 첫 프레임에 래치되면 이후 중앙 근처 프레임에서도 래치값을 유지한다", () => {
@@ -233,12 +245,12 @@ test("detectMirrored: 벗어난 첫 프레임에 래치되면 이후 중앙 근�
   assert.equal(detectMirrored(state, 0.5, center), true, "래치 후에는 중앙 프레임도 래치값 유지");
 });
 
-test("detectMirrored: 잘못된 landmarks(빈 배열·undefined·handX 비수치)는 false, 래치하지 않는다", () => {
+test("detectMirrored: 잘못된 landmarks(빈 배열·undefined·handX 비수치)는 계약값(true=보정 후), 래치하지 않는다", () => {
   const state = makePointerState();
-  assert.equal(detectMirrored(state, 0.5, []), false);
+  assert.equal(detectMirrored(state, 0.5, []), true);
   assert.equal(state.mirrored, null);
-  assert.equal(detectMirrored(state, 0.5, undefined), false);
+  assert.equal(detectMirrored(state, 0.5, undefined), true);
   assert.equal(state.mirrored, null);
-  assert.equal(detectMirrored(state, undefined, mkHand(0.3, 0.5, 1.8)), false);
+  assert.equal(detectMirrored(state, undefined, mkHand(0.3, 0.5, 1.8)), true);
   assert.equal(state.mirrored, null);
 });
