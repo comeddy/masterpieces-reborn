@@ -298,14 +298,6 @@ function drawHandCursors() {
   ctx.restore();
 }
 
-// --- 코너 카메라 미러: 우하단, 렌더는 공용 cam.drawMirror ---
-function drawCamMirror() {
-  if (!cam || !cam.active()) return;
-  const mw = Math.min(200, W * 0.18);
-  const mh = mw * 0.75;                                   // 640×480 비율
-  cam.drawMirror(ctx, { x: W - mw - 12, y: H - mh - 12, w: mw, h: mh });
-}
-
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height; reduced = !!opts.reducedMotion; T = 0;
@@ -325,7 +317,7 @@ export default {
       }
     }
   },
-  tick(dt, ptr) { update(dt, ptr); drawSky(); drawTower(); drawHandCursors(); drawCamMirror(); },
+  tick(dt, ptr) { update(dt, ptr); drawSky(); drawTower(); drawHandCursors(); },
   resize(w, h) { W = w; H = h; cx = W * 0.5; groundY = H * 0.80; },
   dispose() { ctx = null; tiers = []; blocks = []; debris = []; dust = []; clouds = []; cam = null; gest = null; },
 };
