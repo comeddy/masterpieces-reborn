@@ -124,6 +124,7 @@ python3 -m http.server 8090
 - The sound toggle (top right of the atrium) enables audio for works that support it
 - In Great Wave (No. 01), press 📷 to control the sea by hand: an open palm dragged through the water swirls it; closing a fist and opening it again throws spray
 - In Tower of Babel (No. 10), press 📷 and raise one hand to build, or hold up both hands for a moment to collapse the tower
+- In The Tree of Life (No. 11), press 📷 and hold up a hand: new golden branches sprout toward wherever your hand lingers, and sweeping it sideways stirs the wind through the whole tree. The mouse keeps working as a fallback
 
 Deploy your own copy (creates an S3 bucket and CloudFront distribution on first run):
 
@@ -279,6 +280,7 @@ python3 -m http.server 8090
 - 아트리움 우상단 사운드 토글로 사운드 지원 작품의 소리를 켭니다
 - 01번 가나가와 파도에서 📷를 누르면 손으로 바다를 다룹니다. 펼친 손을 움직이면 소용돌이, 주먹을 쥐었다 펼치면 물보라
 - 10번 바벨탑에서 📷를 누르고 한 손을 들면 탑이 쌓이고, 두 손을 잠시 들고 있으면 무너집니다
+- 11번 생명의 나무에서 📷를 누르고 손을 들면 손이 머무는 자리로 금빛 가지가 돋아 자라고, 좌우로 휘두르면 나무 전체에 바람이 입니다. 마우스로도 그대로 가능합니다
 
 직접 배포하려면(최초 실행 시 S3 버킷과 CloudFront 배포를 생성합니다):
 
