@@ -410,29 +410,31 @@ git log --oneline -1
 
 ---
 
-### Task 4: 공용 카메라 계층 merge (10번 브랜치) + data.test cam 검사
+### Task 4: 공용 카메라 계층 merge (10번 브랜치) + 중립 문구 cherry-pick + data.test 일반화
 
 **Files:**
-- Merge: `feature/babel-camera` (가져오는 것: `js/cam.js`, `js/main.js`·`index.html`·`css/style.css` 📷 배선, `test/fixtures/fake-vision/vision_bundle.mjs`, 10번 피스·data 10번 항목 등 10번 고유분)
-- Modify (조건부): `test/data.test.mjs`
+- Merge: `feature/babel-camera` (가져오는 것: `js/cam.js`, `js/main.js`·`index.html`·`css/style.css` 📷 배선, `test/fixtures/fake-vision/vision_bundle.mjs`, 10번 피스·data 10번 항목·`test/babel-gesture.test.mjs` 등 10번 고유분)
+- Cherry-pick: `c4138c7` (01번 브랜치 `feature/wave-hand-gesture`의 "fix: 공용 📷 버튼 문구 작품 중립화" — `index.html` 1줄, `js/main.js` 4줄)
+- Modify: `test/data.test.mjs` (10번이 하드코딩한 `["10"]` 검사를 01번 브랜치와 **동일 문구**의 boolean 검사로 교체)
 
 **Interfaces:**
-- Consumes: 10번 브랜치가 만든 `js/cam.js` `{ request(), active(), hands(), landmarks(), video(), stop() }`, `main.js`의 `opts.cam` 전달·`#v-cam` 노출(`work.cam`)·`closeWork()`의 `cam.stop()`.
-- Produces: 이 브랜치에서 `cam: true` 작품(10·11)에 📷 버튼이 뜨고 11번 `init`에 `opts.cam`이 주입됨 — Task 5의 전제.
+- Consumes: 10번 브랜치의 `js/cam.js` `{ request(), active(), hands(), landmarks(), video(), stop() }`, `main.js`의 `opts.cam` 전달·`#v-cam` 노출(`work.cam`)·`closeWork()`의 `cam.stop()`; 01번의 중립 문구 커밋.
+- Produces: 이 브랜치에서 `cam: true` 작품(10·11)에 📷 버튼이 뜨고 11번 `init`에 `opts.cam`이 주입됨, 버튼 문구가 중립 4종 — Task 5의 전제.
 
-- [ ] **Step 1: 10번 커밋 준비 상태 확인**
+배경: 10번 세션은 종료됐고 공용 계층은 `feature/babel-camera`에 커밋돼 있다(4c45704 cam.js, d5de7fb 배선, d8729de 가짜 번들). 계약과 어긋난 두 곳(10번 전용 문구, data.test `["10"]` 하드코딩)은 01번이 c4138c7과 자기 merge 커밋에서 고쳤다. 같은 패치를 각 브랜치가 적용하면 master 병합 때 충돌 없이 합쳐지므로 여기서도 **동일 커밋 cherry-pick + 동일 테스트 문구**를 쓴다. `cam.js` 자체는 수정하지 않는다.
+
+- [ ] **Step 1: 준비 상태 확인**
 
 Run:
 ```bash
 cd /home/ec2-user/media-art2/.worktrees/klimt-hand
-git log --oneline master..feature/babel-camera
 git ls-tree -r --name-only feature/babel-camera -- js/cam.js test/fixtures/fake-vision/vision_bundle.mjs
 git grep -n "import \* as cam\|v-cam\|cam.stop()\|cam: {" feature/babel-camera -- js/main.js index.html
+git show --stat --oneline c4138c7 | tail -3
 ```
-Expected: `js/cam.js`가 있고 `main.js`에 `import * as cam from "./cam.js"`, `#v-cam` 처리, `cam: { active:`, `closeWork` 안 `cam.stop()`이 모두 보인다.
-없으면(10번 미완): `feature/pearl-camera`에 같은 조건이 충족되는지 위 명령을 브랜치명만 바꿔 확인하고, 충족되면 아래 Step 2에서 그 브랜치를 merge한다. 둘 다 없으면 **여기서 멈추고 컨트롤러에 보고**(대기). 이 브랜치에서 `cam.js`·셸 배선을 직접 구현하지 않는다.
+Expected: `js/cam.js`·가짜 번들 존재, `main.js`에 `import * as cam from "./cam.js"`·`#v-cam` 처리·`cam: { active:`·`closeWork` 안 `cam.stop()`, c4138c7은 `index.html`·`js/main.js` 두 파일만. 하나라도 다르면 멈추고 컨트롤러에 보고.
 
-- [ ] **Step 2: merge**
+- [ ] **Step 2: merge (직후 data.test 1건 실패는 예상된 상태)**
 
 ```bash
 cd /home/ec2-user/media-art2/.worktrees/klimt-hand
@@ -446,8 +448,36 @@ node -e "import('./js/data.js').then(m => console.log(m.WORKS.filter(w => w.cam)
 git add js/data.js && git commit --no-edit
 ```
 `js/data.js` 외 파일에서 충돌이 나면 해결하지 말고 `git merge --abort` 후 컨트롤러에 보고.
+merge 직후 `node --test test/data.test.mjs`는 "cam 플래그는 boolean이며 현재는 10번에만 있다" 1건이 `["10","11"]≠["10"]`으로 **실패해야 정상**(Step 4에서 고침).
 
-- [ ] **Step 3: 병합 결과 검증**
+- [ ] **Step 3: 중립 문구 cherry-pick**
+
+```bash
+git cherry-pick c4138c7
+grep -n "📷\|카메라를 사용할 수 없어요" js/main.js index.html
+```
+Expected: 충돌 없이 적용(두 파일). grep 결과가 정확히 — `main.js`: `CAM_LABEL = "📷 카메라로 체험하기"`, `"📷 카메라 준비 중…"`, `"📷 손을 비춰보세요"`, `"카메라를 사용할 수 없어요 — 마우스로 체험하세요"`; `index.html`: 초기 라벨 `📷 카메라로 체험하기`. 충돌이 나면 `git cherry-pick --abort` 후 컨트롤러에 보고.
+
+- [ ] **Step 4: data.test cam 검사를 01번과 동일 문구로 교체**
+
+`test/data.test.mjs`에서 10번이 넣은 테스트 블록 전체(제목 "cam 플래그는 boolean이며 현재는 10번에만 있다", `assert.deepEqual(... ["10"])` 포함)를 아래 블록으로 **정확히** 바꾼다(01번 브랜치 480e394와 글자까지 동일 — master 병합 시 충돌 방지):
+
+```js
+test("cam 플래그는 boolean이다", () => {
+  for (const w of WORKS) {
+    if ("cam" in w) assert.equal(typeof w.cam, "boolean", `${w.no}.cam 타입`);
+  }
+});
+```
+Run: `node --test test/` → 전체 PASS(10번 테스트 포함). 커밋:
+```bash
+git add test/data.test.mjs
+git commit -m "test: data.js cam 플래그 검사 일반화 — boolean만 (01번 브랜치와 동일 문구)
+
+Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 5: 병합 결과 검증·계보 확인**
 
 Run:
 ```bash
@@ -455,36 +485,10 @@ cd /home/ec2-user/media-art2/.worktrees/klimt-hand
 node --test test/
 node -e "import('./js/cam.js').then(m => console.log('cam import-safe:', typeof m.request, typeof m.hands, m.active()))"
 grep -c "v-cam" index.html js/main.js
-grep -n "📷\|카메라를 사용할 수 없어요" js/main.js
+git log --oneline --graph -12
+git -C /home/ec2-user/media-art2 branch --show-current
 ```
-Expected: 전체 PASS(10번 테스트 포함), `cam import-safe: function function false`, `v-cam`이 두 파일 모두 1 이상. 마지막 grep의 라벨 4종이 Global Constraints의 중립 문구(대기 "📷 카메라로 체험하기" · 요청 중 "📷 카메라 준비 중…" · 활성 "📷 손을 비춰보세요" · 실패 "카메라를 사용할 수 없어요 — 마우스로 체험하세요")와 같은지 확인. **다르면 고치지 않고** 차이를 그대로 컨트롤러에 보고한다(셸 소유자 10번과 조율 대상).
-
-- [ ] **Step 4: data.test cam boolean 검사 — merge에 없을 때만**
-
-`grep -n "cam" test/data.test.mjs`가 비어 있으면 파일 끝에 추가:
-
-```js
-
-test("cam 플래그는 있으면 boolean이다 — 번호 목록은 고정하지 않는다(카메라 작품이 늘어남)", () => {
-  for (const w of WORKS) {
-    if ("cam" in w) assert.equal(typeof w.cam, "boolean", `${w.no}.cam 타입`);
-  }
-  assert.ok(WORKS.some(w => w.cam === true), "cam 작품이 하나 이상 있다");
-});
-```
-Run: `node --test test/data.test.mjs` → PASS. 커밋:
-```bash
-git add test/data.test.mjs
-git commit -m "test: data.js cam 플래그 boolean 검사 (번호 하드코딩 없음)
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
-```
-이미 cam 검사가 있으면 이 단계는 생략한다.
-
-- [ ] **Step 5: 계보 확인**
-
-Run: `git log --oneline --graph -10`
-Expected: merge 커밋의 첫 부모가 이 브랜치의 Task 3 커밋, 둘째 부모가 `feature/babel-camera` 끝. 메인 체크아웃(`git -C /home/ec2-user/media-art2 branch --show-current`)은 건드리지 않았다.
+Expected: 전체 PASS, `cam import-safe: function function false`, `v-cam`이 두 파일 모두 1 이상, merge 커밋의 첫 부모가 Task 3 커밋·둘째 부모가 `feature/babel-camera` 끝, 그 위에 cherry-pick 커밋과 test 커밋. 메인 체크아웃 브랜치는 이 작업 전과 동일(건드리지 않았음).
 
 ---
 
