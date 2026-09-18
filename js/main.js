@@ -143,12 +143,15 @@ function snapshotPointer(dt) {
 // 반대로 움직이는 회귀가 생기지 않는다.
 const handCursor = $("#hand-cursor");
 let handState = makePointerState();
-let handWarned = false;   // 활성화당 1회만 경고 로그
+let handWarned = false;   // 합성 상태·경고 플래그는 카메라가 꺼지면 초기화 — 재활성화마다 새로 시작
 let stageW = 0, stageH = 0;   // sizeCanvas()의 CSS px — 합성 좌표 범위
 
 function synthesizeHand(dt) {
   const work = WORKS[current];
   if (!(work && work.handPointer && cam.active())) {
+    if (handState.seen || handState.mirrored !== null) {    // 유령 손 방지: 이전 활성화의 잔여 상태 제거
+      handState = makePointerState(); handWarned = false;
+    }
     pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
     return false;
   }
@@ -160,6 +163,7 @@ function synthesizeHand(dt) {
     const sample = sampleFromLandmarks(primary, detectMirrored(handState, h && h.x, primary));
     return applyHand(pointer, sample, handState, dt, stageW, stageH);
   } catch (err) {
+    handState = makePointerState();                         // 예외 직후엔 다음 활성화처럼 새로 시작
     pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
     if (!handWarned) { handWarned = true; console.warn("손 인식 예외 — 이 프레임은 마우스로 폴백", err); }
     return false;
