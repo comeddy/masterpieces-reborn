@@ -237,10 +237,12 @@ if (flash > 0) flash -= dt;
   merge마다 깨진다).
 - `test/integrity.test.mjs`: 무변경 — 03번은 카메라 API를 `opts` 주입으로만 쓰므로
   import-safe 유지.
-- Playwright 시각 검증: 뷰어의 `#stage`에 03번 모듈을 직접 `import()`해 가짜
-  `opts.cam` getter(손 좌표 시퀀스·핀치 랜드마크)를 주입하고 `tick`을 수동으로
-  돌려 바람·파동·손 커서·미러 자리 렌더를 스크린샷으로 확인(09번 가짜 마이크
-  선례). 버튼 UI는 `getUserMedia`를 reject로 덮어 실패 문구·disabled를 확인.
+- Playwright 시각 검증: 10번 브랜치가 만든 E2E 시임을 재사용한다 —
+  `window.__CAM_CDN__`으로 `test/fixtures/fake-vision/vision_bundle.mjs`(가짜
+  MediaPipe 번들)를 가리키고 `getUserMedia`를 캔버스 `captureStream()`으로 덮으면
+  실제 📷 버튼 → `cam.request()` → `hands()/landmarks()` 경로를 그대로 타면서
+  손 좌표·핀치 랜드마크 시퀀스를 연출할 수 있다. 바람·파동·손 커서·미러 렌더를
+  스크린샷으로 확인하고, 권한 reject 케이스로 실패 문구·disabled를 확인한다.
   원작 대비 구도·진주 위치가 변하지 않았는지 기존 스크린샷과 대조.
 - 실제 카메라·MediaPipe: 배포 전 로컬(`python3 -m http.server 8090`, localhost는
   보안 컨텍스트)에서 수동 1회 — 권한 팝업, 손 커서 거울 방향, 핀치 파동, 뷰어
