@@ -9,6 +9,10 @@ let pearls = [];          // 진주 위치 입자 인덱스 목록
 let flicker = 0;          // 촛불 깜빡임 남은 시간(초)
 let flickerAge = 0;       // 깜빡임 경과 시간(초) — 방사형 웨이브 전파용
 let waveOrigin = { x: 0, y: 0 };
+let cam = null;                          // opts.cam getter 묶음(없으면 마우스만)
+let handS = null, pinchS = null;         // 순수 로직 상태
+let cursor = null;                       // 손 위치 {x,y}(캔버스 px) 또는 null
+let flash = 0;                           // 핀치 링 잔여 시간(초)
 
 // 진주의 이미지 내 정규화 좌표 — contain-fit 박스 기준.
 // 원작 03-pearl-earring.jpg 픽셀 측정값(귀걸이 하이라이트 중심).
@@ -85,6 +89,10 @@ export default {
       jitter: 4,
     });
 
+    cam = opts.cam || null;
+    handS = makeHandState(); pinchS = makePinchState();
+    cursor = null; flash = 0;
+
     tagPearls();
   },
 
@@ -106,6 +114,26 @@ export default {
         waveOrigin.x = ptr.x; waveOrigin.y = ptr.y;
       }
     }
+    // 손(카메라): 손 속도 = 촛불 바람, 핀치 = 깜빡임 파동 — 마우스와 병행
+    if (cam && cam.active()) {
+      const h = cam.hands();
+      const wind = handWind(handS, h.n ? h.x : null, h.n ? h.y : null, dt);
+      if (wind) {
+        const px = wind.x * W, py = wind.y * H;
+        const g = 0.35 + 0.65 * wind.k;                     // 살랑(0.35)~세찬(1)
+        field.scatter(px, py, 110, (reduced ? 22 : 60) * g); // 손은 커서보다 넓게
+        applyBuoyancy(px, py, 140, (reduced ? 30 : 80) * g, dt);
+      }
+      const lm = cam.landmarks();
+      const ratio = lm.length ? pinchRatio(lm[0]) : null;
+      if (pinchStep(pinchS, ratio, dt).fire) {
+        flicker = FLICKER_DUR; flickerAge = 0;
+        waveOrigin.x = handS.x * W; waveOrigin.y = handS.y * H;
+        flash = 0.25;
+      }
+      cursor = h.n ? { x: handS.x * W, y: handS.y * H } : null;
+    } else { cursor = null; }
+    if (flash > 0) flash -= dt;
     if (flicker > 0) { flicker -= dt; flickerAge += dt; }
 
     // 2) 시뮬레이션 -------------------------------------------------
@@ -115,6 +143,8 @@ export default {
     drawBackground();
     drawParticles();
     drawPearls();
+    drawHandCursor();
+    drawMirror();
   },
 
   resize(w, h) {
@@ -123,7 +153,7 @@ export default {
   },
 
   dispose() {
-    ctx = null; field = null; pearls = [];
+    ctx = null; field = null; pearls = []; cam = null; cursor = null;
   },
 };
 
@@ -326,6 +356,33 @@ function drawPearls() {
     ctx.fill();
   }
   ctx.globalCompositeOperation = "source-over";
+}
+
+// --- 손 커서: 촛불색 글로우 점 + 핀치 순간 확대 링 ------------------
+function drawHandCursor() {
+  if (!cursor) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const r = 12;
+  const g = ctx.createRadialGradient(cursor.x, cursor.y, 0, cursor.x, cursor.y, r * 2);
+  g.addColorStop(0, "rgba(255,200,120,0.85)");
+  g.addColorStop(1, "rgba(255,200,120,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cursor.x, cursor.y, r * 2, 0, Math.PI * 2); ctx.fill();
+  if (flash > 0) {                                  // 핀치: 커지며 옅어지는 링
+    const t = 1 - flash / 0.25;
+    ctx.strokeStyle = "rgba(255,220,160," + (0.8 * (1 - t)).toFixed(3) + ")";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cursor.x, cursor.y, r + t * 40, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// --- 코너 미러: 우하단, 렌더는 공용 cam.drawMirror --------------------
+function drawMirror() {
+  if (!cam || !cam.active() || !cam.drawMirror) return;
+  const mw = Math.min(200, W * 0.18), mh = mw * 0.75;   // 640×480 비율
+  cam.drawMirror(ctx, { x: W - mw - 18, y: H - mh - 18, w: mw, h: mh });
 }
 
 function clamp255(v) {
