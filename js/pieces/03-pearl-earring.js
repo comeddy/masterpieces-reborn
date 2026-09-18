@@ -41,6 +41,32 @@ export function handWind(s, hx, hy, dt) {
   return k > 0 ? { x: s.x, y: s.y, k } : null;
 }
 
+// 핀치(엄지 끝 4·검지 끝 8 맞대기) = 손가락 튕기기 → 촛불 깜빡임 파동
+export const PINCH_IN = 0.30;   // 이 비율 미만이면 닫힘 진입
+export const PINCH_OUT = 0.45;  // 이 비율 초과면 해제 (사이 구간은 상태 유지)
+export const PINCH_COOL = 0.4;  // 발화 후 재발화 금지(초)
+
+// 엄지 끝-검지 끝 거리를 손 크기(손목 0 ↔ 중지 MCP 9)로 나눈 비율. 크기 0이면 열림(1).
+export function pinchRatio(lm) {
+  const size = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y);
+  if (size <= 1e-9) return 1;
+  return Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) / size;
+}
+
+export function makePinchState() { return { closed: false, cool: 0 }; }
+
+export function pinchStep(s, ratio, dt) {
+  s.cool = Math.max(0, s.cool - dt);
+  if (ratio === null || ratio === undefined) { s.closed = false; return { fire: false }; }
+  if (!s.closed && ratio < PINCH_IN) {
+    s.closed = true;
+    if (s.cool <= 0) { s.cool = PINCH_COOL; return { fire: true }; }
+    return { fire: false };
+  }
+  if (s.closed && ratio > PINCH_OUT) s.closed = false;
+  return { fire: false };
+}
+
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height;

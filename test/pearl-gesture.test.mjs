@@ -1,7 +1,9 @@
 // test/pearl-gesture.test.mjs — 03번 손 입력 순수 로직(바람·핀치) 검증
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WIND_MIN, WIND_FULL, makeHandState, handWind } from "../js/pieces/03-pearl-earring.js";
+import { WIND_MIN, WIND_FULL, makeHandState, handWind,
+         PINCH_IN, PINCH_OUT, PINCH_COOL, pinchRatio, makePinchState, pinchStep }
+  from "../js/pieces/03-pearl-earring.js";
 
 const DT = 1 / 60;
 // 손을 (x0,y0)에서 초당 speed(정규화 거리/초)로 +x 방향 이동시키며 frames 프레임 돌린 마지막 결과
@@ -60,4 +62,60 @@ test("handWind: 사라진 뒤 먼 위치 재등장은 첫 프레임 null(점프 
   handWind(s, null, null, DT);
   assert.equal(handWind(s, 0.9, 0.9, DT), null);
   assert.equal(s.x, 0.9);
+});
+
+// 21점 손: 손목(0)·중지 MCP(9)로 손 크기, 엄지 끝(4)·검지 끝(8) 거리로 핀치
+function handLm(size, tipGap) {
+  const lm = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
+  lm[0] = { x: 0.5, y: 0.5 + size, z: 0 };
+  lm[9] = { x: 0.5, y: 0.5, z: 0 };
+  lm[4] = { x: 0.5 - tipGap / 2, y: 0.4, z: 0 };
+  lm[8] = { x: 0.5 + tipGap / 2, y: 0.4, z: 0 };
+  return lm;
+}
+
+const stepN = (s, ratio, n) => { let fires = 0; for (let i = 0; i < n; i++) if (pinchStep(s, ratio, DT).fire) fires++; return fires; };
+
+test("pinchRatio: 손 크기에 무관한 비율", () => {
+  assert.ok(Math.abs(pinchRatio(handLm(0.2, 0.04)) - 0.2) < 1e-9);
+  assert.ok(Math.abs(pinchRatio(handLm(0.4, 0.08)) - 0.2) < 1e-9);
+  assert.equal(pinchRatio(handLm(0, 0.1)), 1, "크기 0이면 열림(1)");
+});
+
+test("pinchStep: 진입 시 1회 발화, 유지 중 재발화 없음", () => {
+  const s = makePinchState();
+  assert.equal(stepN(s, 0.6, 5), 0);
+  assert.equal(stepN(s, 0.2, 30), 1);
+  assert.equal(s.closed, true);
+});
+
+test("pinchStep: 중간대(0.38)는 상태 유지(히스테리시스)", () => {
+  const s = makePinchState();
+  assert.equal(stepN(s, 0.38, 10), 0, "열린 상태에서 중간대는 진입 아님");
+  stepN(s, 0.2, 1);
+  stepN(s, 0.38, 10);
+  assert.equal(s.closed, true, "닫힌 상태에서 중간대는 해제 아님");
+});
+
+test("pinchStep: 해제 후 쿨다운 경과하면 다시 발화", () => {
+  const s = makePinchState();
+  stepN(s, 0.2, 1);
+  stepN(s, 0.6, Math.ceil(PINCH_COOL / DT) + 2);
+  assert.equal(s.closed, false);
+  assert.equal(stepN(s, 0.2, 1), 1);
+});
+
+test("pinchStep: 쿨다운 중 재진입은 발화 없음", () => {
+  const s = makePinchState();
+  stepN(s, 0.2, 1);
+  stepN(s, 0.6, 3);              // 즉시 해제(0.05s)
+  assert.equal(stepN(s, 0.2, 1), 0);
+  assert.equal(s.closed, true, "발화는 없지만 닫힘 상태는 기록");
+});
+
+test("pinchStep: ratio null(손 없음)은 closed 리셋", () => {
+  const s = makePinchState();
+  stepN(s, 0.2, 1);
+  assert.equal(pinchStep(s, null, DT).fire, false);
+  assert.equal(s.closed, false);
 });
