@@ -60,3 +60,30 @@ test("부재 후 먼 위치 재등장: 첫 프레임에 위치가 즉시 놓이�
   assert.equal(s.x, 0.9); assert.equal(s.y, 0.8);
   assert.equal(s.vx, 0); assert.equal(s.vy, 0);
 });
+
+// ── 스텁 ctx 스모크: 브라우저 없는 node에서 렌더 코드까지 실행한다 ──
+// 모든 프로퍼티 읽기·호출·대입을 흡수하는 Proxy — document.createElement("canvas").getContext("2d") 등 전부 stub
+const stub = new Proxy(function () {}, {
+  get: (_, k) => (k === Symbol.toPrimitive ? () => 0 : stub),
+  set: () => true, apply: () => stub, construct: () => stub,
+});
+
+test("가짜 cam으로 init→tick→dispose가 예외 없이 돌고 hands()는 tick당 정확히 1회 불린다", async () => {
+  globalThis.document = stub;
+  try {
+    const piece = (await import("../js/pieces/11-tree-of-life.js")).default;
+    let calls = 0, hand = { n: 0, x: 0.5, y: 0.5 };
+    const cam = { active: () => true, hands: () => { calls++; return hand; }, video: () => null, landmarks: () => [] };
+    piece.init({ canvas: stub, ctx: stub, width: 1280, height: 720, reducedMotion: false, audio: null, assets: {}, cam });
+    const ptr = { x: 640, y: 300, px: 640, py: 300, dx: 0, dy: 0, down: false, justDown: false, justUp: false, downTime: 0, inside: true };
+    for (let i = 0; i < 60; i++) piece.tick(1 / 60, ptr);        // 손 없음 1초 — 마우스 경로
+    hand = { n: 1, x: 0.3, y: 0.35 };
+    for (let i = 0; i < 120; i++) piece.tick(1 / 60, ptr);       // 손 머무름 2초 — 발아·가속·표식
+    for (let i = 0; i < 30; i++) { hand = { n: 1, x: i % 2 ? 0.2 : 0.8, y: 0.35 }; piece.tick(1 / 60, ptr); } // 휘두름 0.5초 — 바람
+    hand = { n: 0, x: 0.3, y: 0.35 };
+    for (let i = 0; i < 60; i++) piece.tick(1 / 60, null);       // 손 사라짐, ptr null도 허용
+    piece.resize(800, 600); piece.tick(1 / 60, ptr);
+    piece.dispose();
+    assert.equal(calls, 271, "hands() 호출 수 = tick 수");
+  } finally { delete globalThis.document; }
+});
