@@ -20,6 +20,27 @@ const FLICKER_DUR = 0.6;  // 클릭 깜빡임 지속(초)
 // tagPearls()가 여러 번 호출돼도(예: resize 반복) 누적 반감되지 않도록 한다.
 const PEARL_SPRING = 2.1;
 
+// ---- 손 입력 순수 로직 (node:test 대상) ----------------------------
+// 손 속도가 촛불 바람이 된다. 좌표는 0..1 정규화(해상도 무관), 속도는 정규화 거리/초.
+export const WIND_MIN = 0.15;   // 이 속도 미만은 랜드마크 지터로 보고 무시
+export const WIND_FULL = 0.9;   // 이 속도 이상이면 마우스 드래그와 같은 세기(k=1)
+export const HAND_SMOOTH = 18;  // 위치 EMA 반응(1/s)
+
+export function makeHandState() { return { x: 0, y: 0, seen: false }; }
+
+// 반환: { x, y, k } (스무딩 위치·세기 0..1) 또는 null(손 없음·첫 등장·임계 미만)
+export function handWind(s, hx, hy, dt) {
+  if (!Number.isFinite(hx) || !Number.isFinite(hy)) { s.seen = false; return null; } // null·undefined·NaN 모두 손 없음
+  if (!s.seen) { s.x = hx; s.y = hy; s.seen = true; return null; } // 점프 속도 방지
+  const px = s.x, py = s.y;
+  const a = Math.min(1, HAND_SMOOTH * dt);
+  s.x += (hx - s.x) * a;
+  s.y += (hy - s.y) * a;
+  const speed = Math.hypot(s.x - px, s.y - py) / Math.max(dt, 1e-6);
+  const k = Math.min(1, Math.max(0, (speed - WIND_MIN) / (WIND_FULL - WIND_MIN)));
+  return k > 0 ? { x: s.x, y: s.y, k } : null;
+}
+
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height;
