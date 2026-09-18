@@ -36,7 +36,7 @@ The entire site — curation, specification, 16 artwork modules, tests, quality 
 
 - **16 interactive works across 4 wings** — particle fluids, chiaroscuro lantern reveals, ink-wash diffusion, living crowds, moonlight narratives, scroll-journey parallax, paper-puppet theatre, and a generative cubist portrait that reassembles on every click
 - **Zero-build architecture** — vanilla ES modules and Canvas 2D only; no frameworks, no bundler; deploying is a single `aws s3 sync`
-- **Hand-gesture works** — pressing the 📷 button in a work loads MediaPipe Hand Landmarker on demand (pinned CDN version) and the shell synthesizes the hand into the pointer contract: in Great Wave an open palm stirs the sea and a fist-to-open flick throws spray. Nothing external is downloaded until the button is pressed; the mouse keeps working as a fallback
+- **Hand-gesture works** — pressing the 📷 button in a work loads MediaPipe Hand Landmarker on demand (pinned CDN version) and, for works that opt in, the shell synthesizes the hand into the pointer contract: in Great Wave an open palm stirs the sea and a fist-to-open flick throws spray. Nothing external is downloaded until the button is pressed; the mouse keeps working as a fallback
 - **Shared particle engine** — a reusable gather/scatter/restore engine (`js/particle-engine.js`) drives the Wave Hall: pixels sampled from the original painting become spring-driven particles that scatter under the pointer and return to the immortal image
 - **Data-driven shell** — `js/data.js` is the single source of truth; the atrium, cards, viewer, and navigation render automatically from 16 metadata entries
 - **Piece module contract** — every artwork is one ES module exporting `{init, tick, resize, dispose}`; the shell owns the rAF loop and pointer state, so pieces stay pure and leak-free
@@ -190,7 +190,7 @@ Masterpieces Reborn은 호쿠사이의 파도에서 안견의 몽유도원도까
 
 - **4개 전시관, 16점의 인터랙티브 작품** — 입자 유체, 등불 키아로스쿠로, 수묵 번짐, 살아있는 군중, 달빛 내러티브, 두루마리 패럴랙스, 종이 인형극, 클릭마다 재조립되는 제너러티브 큐비즘 초상
 - **제로-빌드 아키텍처** — 바닐라 ES 모듈과 Canvas 2D만 사용합니다. 프레임워크·번들러가 없어 배포는 `aws s3 sync` 한 번입니다
-- **손짓 인터랙션 작품** — 작품 안 📷 버튼을 누른 시점에만 MediaPipe Hand Landmarker(CDN, 버전 고정)를 불러오고, 셸이 손을 포인터 규약으로 합성합니다. 가나가와 파도에서는 펼친 손이 바다를 휘젓고 주먹을 쥐었다 펼치면 물보라가 튑니다. 버튼을 누르기 전에는 외부 다운로드가 없고 마우스는 폴백으로 계속 동작합니다
+- **손짓 인터랙션 작품** — 작품 안 📷 버튼을 누른 시점에만 MediaPipe Hand Landmarker(CDN, 버전 고정)를 불러오고, 합성을 켠 작품에서는 셸이 손을 포인터 규약으로 합성합니다. 가나가와 파도에서는 펼친 손이 바다를 휘젓고 주먹을 쥐었다 펼치면 물보라가 튑니다. 버튼을 누르기 전에는 외부 다운로드가 없고 마우스는 폴백으로 계속 동작합니다
 - **공용 입자 엔진** — 재사용 가능한 응집·흩어짐·복원 엔진(`js/particle-engine.js`)이 파도의 방을 구동합니다. 원작에서 샘플링한 픽셀이 스프링 입자가 되어 손길에 흩어졌다가 불멸의 형상으로 되돌아옵니다
 - **데이터 주도 셸** — `js/data.js`가 단일 진실 소스입니다. 16개 메타데이터 항목만으로 아트리움, 카드, 뷰어, 내비게이션이 자동으로 렌더됩니다
 - **작품 모듈 계약** — 모든 작품은 `{init, tick, resize, dispose}`를 내보내는 하나의 ES 모듈입니다. rAF 루프와 포인터 상태는 셸이 소유하므로 작품 모듈은 순수하고 누수가 없습니다
