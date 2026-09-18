@@ -12,6 +12,11 @@ let bird = null;
 let baseX = 0, baseY = 0;
 let windX = 0, windV = 0;               // 전역 바람(스프링)
 let spawnAcc = 0, shimAcc = 0, birdAcc = 0, nextSpawn = 2, nextBird = 8;
+let cam = null, track = null;           // 공용 카메라 getter(opts.cam)와 손 추적 상태(makeHandTrack)
+let handOn = false, handAcc = 0, handShimAcc = 0;
+let hx = null, hy = null;               // 이번 프레임 손의 캔버스 좌표(없으면 null)
+const SWEEP = 0.6;                      // 휘두름 판정 속도(정규화 단위/초) — 이상이면 발아 대신 바람만
+const NEAR_R = 0.22, NEAR_BOOST = 2.5;  // 손 반경 S*NEAR_R 안 가지의 성장 가속
 
 const CAP = 78;                         // 가지 수 상한
 const CREAM = "#e7d9b9", CREAM2 = "#f2e9cf";
@@ -22,6 +27,39 @@ const TEAL = "#2f7d68", BLUE = "#3a5a86", ROSE = "#c25c6d", DISC = "#b6ad98";
 const rnd = (a, b) => a + Math.random() * (b - a);
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const TAU = Math.PI * 2;
+
+// ── 손 추적 순수 계산부 (export — node:test 대상, 브라우저 API 미참조) ────────
+// pt는 공용 cam.hands()의 주 손 좌표 {x,y}(거울 보정 후 0..1) 또는 null(손 없음).
+// 위치는 EMA 스무딩, 속도는 스무딩 위치의 차분을 다시 EMA(정규화 단위/초).
+// present는 PRESENT_AFTER초 연속 검출 후 켜지고 LOST_AFTER초 연속 미검출 후 꺼진다(프레임 드랍 흡수).
+export const SMOOTH_RATE = 14, VEL_RATE = 10, PRESENT_AFTER = 0.05, LOST_AFTER = 0.35;
+
+export function makeHandTrack() {
+  return { present: false, x: 0.5, y: 0.5, vx: 0, vy: 0, seenT: 0, lostT: 0, init: false };
+}
+
+export function handTrackStep(s, pt, dt) {
+  if (dt <= 0) return s;
+  const kv = 1 - Math.exp(-VEL_RATE * dt);
+  if (pt) {
+    if (!s.init || !s.present) {          // 첫 검출·부재 후 재등장: 옛 위치에서 날아오지 않도록 점프, 속도 0
+      s.x = pt.x; s.y = pt.y; s.vx = 0; s.vy = 0; s.init = true;
+    } else {
+      const k = 1 - Math.exp(-SMOOTH_RATE * dt);
+      const nx = s.x + (pt.x - s.x) * k, ny = s.y + (pt.y - s.y) * k;
+      s.vx += ((nx - s.x) / dt - s.vx) * kv;
+      s.vy += ((ny - s.y) / dt - s.vy) * kv;
+      s.x = nx; s.y = ny;
+    }
+    s.seenT += dt; s.lostT = 0;
+    if (s.seenT >= PRESENT_AFTER) s.present = true;
+  } else {
+    s.lostT += dt; s.seenT = 0;
+    s.vx -= s.vx * kv; s.vy -= s.vy * kv;   // 위치는 유지, 속도만 0으로 감쇠
+    if (s.lostT >= LOST_AFTER) s.present = false;
+  }
+  return s;
+}
 
 // ── 로그 나선 한 점 (미변형 기준 좌표) ─────────────────
 // b.cx,cy = 감김 중심, R0 = 시작 반지름, th0 = 시작각, dir = 감김 방향, k = 조임, span = 총 회전각
@@ -225,6 +263,8 @@ export default {
     T = 0; actx = null; wasDown = false;
     windX = 0; windV = 0; spawnAcc = 0; shimAcc = 0; birdAcc = 0;
     nextSpawn = rnd(1.2, 2.4); nextBird = rnd(7, 12);
+    cam = opts.cam || null; track = makeHandTrack();
+    handOn = false; handAcc = 0; handShimAcc = 0; hx = hy = null;
     layout();
     plant();
   },
@@ -232,13 +272,37 @@ export default {
   tick(dt, ptr) {
     T += dt;
 
-    // ── 입력 ──
-    if (ptr) {
-      if (ptr.justDown) ensureAudio();
-      if (ptr.justDown && ptr.inside) sprout(true, ptr.x, ptr.y);   // 클릭 = 새 가지 발아
-      if (ptr.down && ptr.inside && wasDown)                        // 드래그 = 바람
-        windV += ptr.dx * (reduced ? 6 : 14);
-      wasDown = ptr.down;
+    // ── 입력: 카메라 손이 보이면 손이 입력원, 아니면 마우스 폴백 ──
+    let pt = null;
+    if (cam && cam.active()) {                                      // hands()는 tick당 정확히 1회(프레임당 1회 탐지 계약)
+      const h = cam.hands();
+      // 공용 서비스가 비정상 값을 주면 NaN이 바람 스프링을 영구 오염 — 유한값만 수용
+      if (h && h.n >= 1 && Number.isFinite(h.x) && Number.isFinite(h.y)) pt = { x: h.x, y: h.y };
+    } else if (handOn) {
+      // 📷 끔/스트림 종료: 검출 드랍과 달리 즉시 손 상태를 지운다
+      track = makeHandTrack(); handOn = false; hx = hy = null; handAcc = 0;
+    }
+    handTrackStep(track, pt, dt);
+    if (track.present) {
+      hx = track.x * W; hy = track.y * H;
+      const speed = Math.hypot(track.vx, track.vy);                 // 정규화 단위/초 — 해상도 무관
+      if (!handOn) { ensureAudio(); sprout(true, hx, hy); handAcc = 0; }   // 손 첫 등장 = 클릭 1회
+      windV += track.vx * W * dt * (reduced ? 6 : 14);              // 드래그 dx·14와 같은 체감 (dx ≈ vx·W·dt)
+      if (speed < SWEEP) {                                          // 머무름 → 주기 발아
+        handAcc += dt;
+        if (handAcc >= (reduced ? 1.1 : 0.6)) { handAcc = 0; sprout(true, hx, hy); }
+      } else handAcc = 0;                                           // 휘두름 → 바람만
+      handOn = true;
+      if (ptr) wasDown = ptr.down;                                  // 마우스 복귀 시 stale 드래그 방지
+    } else {
+      handOn = false; hx = hy = null;
+      if (ptr) {
+        if (ptr.justDown) ensureAudio();
+        if (ptr.justDown && ptr.inside) sprout(true, ptr.x, ptr.y); // 클릭 = 새 가지 발아
+        if (ptr.down && ptr.inside && wasDown)                      // 드래그 = 바람
+          windV += ptr.dx * (reduced ? 6 : 14);
+        wasDown = ptr.down;
+      }
     }
     // 바람 스프링(0으로 복귀)
     const K = 7, D = reduced ? 5 : 3.2;
@@ -249,7 +313,12 @@ export default {
     for (const b of branches) {
       b.age += dt;
       if (b.grow < 1) {
-        b.grow = Math.min(1, b.grow + b.rate * dt);
+        let rate = b.rate;
+        if (hx !== null) {                                          // 손 가까운 가지가 먼저 피어난다
+          const q = spiralPt(b, b.grow);
+          if (Math.hypot(q.x - hx, q.y - hy) < S * NEAR_R) rate *= NEAR_BOOST;
+        }
+        b.grow = Math.min(1, b.grow + rate * dt);
         if (b.grow >= 1 && !b.chimed) { b.chimed = true; chime(1 - b.w0 / (S * 0.03)); }
       }
       if (b.dying) b.fade = Math.max(0, b.fade - dt / 1.3);
@@ -284,6 +353,14 @@ export default {
         }
       }
     }
+    if (!reduced && hx !== null) {                                  // 손 주변 금가루 — 기존 shimmer 재사용
+      handShimAcc += dt;
+      if (handShimAcc >= 0.06) {
+        handShimAcc = 0;
+        const a = rnd(0, TAU), r = rnd(0, S * 0.05);
+        shimmer.push({ x: hx + Math.cos(a) * r, y: hy + Math.sin(a) * r, life: 1, sz: rnd(1.5, 3.5) * (S / 700) });
+      }
+    }
     for (const s of shimmer) s.life -= dt / 0.9;
     shimmer = shimmer.filter((s) => s.life > 0);
 
@@ -311,6 +388,7 @@ export default {
     for (const b of ordered) drawBranch(b);
     drawShimmer();
     if (bird) drawBird();
+    if (hx !== null) drawHand();
   },
 
   resize(w, h) { W = w; H = h; layout(); },
@@ -319,6 +397,7 @@ export default {
     if (actx) { try { actx.close(); } catch (e) {} }
     actx = null; audio = null; ctx = null; bg = null;
     branches = []; shimmer = []; trunk = []; bird = null;
+    cam = null; track = null; hx = hy = null; handOn = false;
   },
 };
 
@@ -459,5 +538,17 @@ function drawBird() {
   ctx.lineTo(u * 1.3, -u * 0.5); ctx.closePath(); ctx.fill();
   // 눈
   ctx.fillStyle = EYE_W; ctx.beginPath(); ctx.arc(u * 0.95, -u * 0.8, u * 0.12, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+
+// 손 표식: 클림트 눈 모티프 — 금빛 고리(펄스) + 검은 중심점. 바람(swayX)은 적용하지 않는다(손은 흔들리지 않음).
+function drawHand() {
+  const r = S * 0.02 * (1 + 0.1 * Math.sin(T * 3));
+  ctx.save();
+  ctx.globalAlpha = 0.75;
+  ctx.lineWidth = Math.max(1.5, S * 0.004); ctx.strokeStyle = GOLD_HI;
+  ctx.beginPath(); ctx.arc(hx, hy, r, 0, TAU); ctx.stroke();
+  ctx.fillStyle = RING;
+  ctx.beginPath(); ctx.arc(hx, hy, S * 0.006, 0, TAU); ctx.fill();
   ctx.restore();
 }
