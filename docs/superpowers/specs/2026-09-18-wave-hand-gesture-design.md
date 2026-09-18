@@ -119,13 +119,17 @@ opt-in 한다(10번 같은 작품엔 영향 없음).
   if (WORKS[current].handPointer && cam.active()) {
     const h = cam.hands();                                // 추론 트리거(프레임당 1회는 cam.js가 보장)
     const lm = cam.landmarks()[0];
-    const sample = lm && lm.length >= 21 ? sampleFromLandmarks(lm, landmarksMirrored(h, lm)) : null;
+    const sample = sampleFromLandmarks(lm, detectMirrored(handState, h && h.x, lm));
     handOwns = applyHand(pointer, sample, handState, dt, stageW, stageH);
   } else {
     pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
   }
   updateHandCursor(handOwns);
   ```
+  실제 구현에서는 `if` 분기 안쪽(`cam.hands()`~`applyHand`)이 통째로 try/catch로 감싸여 있다 —
+  검출 예외는 그 프레임만 마우스 폴백으로 넘기고 rAF 루프는 죽지 않는다. `else` 분기(카메라 꺼짐
+  또는 handPointer 아닌 작품)에서는 이전 상태가 남아 있으면(`handState.seen || handState.mirrored
+  !== null`) `handState`·`handWarned`를 초기화한다 — 재활성화 때 유령 손이 남지 않도록.
   주의: 마우스 `pendingDown/pendingUp`은 `snapshotPointer`가 이미 소비했으므로 손이 점유한
   프레임에서 마우스 클릭은 버려진다(의도 — 손이 보이는 동안 손이 우선).
 - 링 커서 `#hand-cursor`: `handOwns`가 true면 `hidden = false`, `style.transform = translate(x px, y px) translate(-50%, -50%)`,
