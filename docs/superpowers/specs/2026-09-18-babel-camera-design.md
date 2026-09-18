@@ -49,7 +49,7 @@
 
 - `work.cam === true`일 때만 뷰어에 📷 버튼 노출(🎤 버튼과 같은 위치 규약,
   `viewer__cam` 클래스·`#v-cam` id). 클릭 → `cam.request()`. 대기 중 disabled,
-  성공 시 "📷 손을 비춰보세요" + aria-pressed=true, 실패 시 "카메라를 사용할 수
+  성공 시 "📷 한 손 쌓기 · 두 손 붕괴" + aria-pressed=true, 실패 시 "카메라를 사용할 수
   없어요 — 클릭으로 체험하세요" + disabled.
 - 시퀀스 가드(`camReqSeq`) — mic 버튼의 `micReqSeq`와 동일 패턴.
 - 작품 opts 확장: `cam: { active, hands, video, landmarks }` getter 묶음.

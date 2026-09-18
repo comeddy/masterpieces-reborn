@@ -235,7 +235,8 @@ async function openWork(idx) {
                  audio: { enabled: () => soundOn,
                           mic: { active: () => mic.active(), level: () => mic.level() } },
                  cam: { active: () => cam.active(), hands: () => cam.hands(),
-                        video: () => cam.video(), landmarks: () => cam.landmarks() } });
+                        video: () => cam.video(), landmarks: () => cam.landmarks(),
+                        drawMirror: (c, rect) => cam.drawMirror(c, rect) } });
     lastT = performance.now();
     pointer.downTime = 0;
     rafId = requestAnimationFrame(frame);
