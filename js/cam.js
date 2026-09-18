@@ -85,6 +85,33 @@ export function hands() { detect(); return last; }
 export function landmarks() { detect(); return lmarks; }
 export function video() { return vid; }
 
+// 코너 카메라 미러(공용): rect에 비디오를 좌우반전으로 그리고 거울 보정된
+// 랜드마크 점 + 1px 테두리. 작품은 자리(rect)만 정한다. 캔버스 상태는 원복.
+export function drawMirror(ctx, rect) {
+  if (!active() || !vid || vid.readyState < 2) return;
+  const { x, y, w, h } = rect;
+  detect();                                               // 같은 프레임 결과 보장
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.globalAlpha = 0.92;
+  ctx.translate(x + w, y); ctx.scale(-1, 1);              // 좌우반전 미러
+  ctx.drawImage(vid, 0, 0, w, h);
+  ctx.restore();
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  ctx.fillStyle = "rgba(255,210,63,0.9)";                 // 랜드마크 점(이미 거울 좌표)
+  for (const hand of lmarks) {
+    for (const p of hand) {
+      ctx.beginPath();
+      ctx.arc(x + p.x * w, y + p.y * h, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  ctx.restore();
+}
+
 export function stop() {
   gen++;                                    // 대기 중 request()의 늦은 완료 무효화
   if (stream) for (const t of stream.getTracks()) t.stop(); // 카메라 표시등 끄기
