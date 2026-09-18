@@ -125,6 +125,7 @@ export default {
         applyBuoyancy(px, py, 140, (reduced ? 30 : 80) * g, dt);
       }
       const lm = cam.landmarks();
+      // cam.js가 21점 미만 손을 필터링하므로 lm[0]은 항상 21점 — pinchRatio는 0·4·8·9를 인덱싱
       const ratio = lm.length ? pinchRatio(lm[0]) : null;
       if (pinchStep(pinchS, ratio, dt).fire) {
         flicker = FLICKER_DUR; flickerAge = 0;
@@ -132,7 +133,12 @@ export default {
         flash = 0.25;
       }
       cursor = h.n ? { x: handS.x * W, y: handS.y * H } : null;
-    } else { cursor = null; }
+    } else {
+      // 카메라 꺼짐: 손 없음으로 흘려 seen·closed를 풀고 쿨다운은 계속 감소 — 재활성 시 점프 속도 방지
+      handWind(handS, null, null, dt);
+      pinchStep(pinchS, null, dt);
+      cursor = null;
+    }
     if (flash > 0) flash -= dt;
     if (flicker > 0) { flicker -= dt; flickerAge += dt; }
 

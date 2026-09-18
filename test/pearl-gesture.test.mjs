@@ -119,3 +119,22 @@ test("pinchStep: ratio null(손 없음)은 closed 리셋", () => {
   assert.equal(pinchStep(s, null, DT).fire, false);
   assert.equal(s.closed, false);
 });
+
+test("handWind: 카메라가 꺼진 동안 null을 흘리면 재활성 첫 프레임은 점프 속도 없이 null", () => {
+  const s = makeHandState();
+  sweep(s, 0.1, 0.5, 0.5, 10);           // 손 추적 중
+  handWind(s, null, null, DT);           // 카메라 꺼짐 프레임(tick의 else 분기와 동일)
+  assert.equal(s.seen, false);
+  assert.equal(handWind(s, 0.9, 0.5, DT), null, "재등장 첫 프레임은 위치만 기록");
+  assert.equal(s.x, 0.9);
+  assert.ok(sweep(s, 0.9, 0.5, 0.05, 5) === null, "그 뒤 미세 이동은 바람 없음");
+});
+
+test("pinchStep: 카메라가 꺼진 동안 null을 흘리면 closed가 풀리고 쿨다운은 계속 감소", () => {
+  const s = makePinchState();
+  pinchStep(s, 0.2, DT);                 // 발화 → closed=true, cool=PINCH_COOL
+  assert.equal(s.closed, true);
+  for (let i = 0; i < 3; i++) pinchStep(s, null, DT);
+  assert.equal(s.closed, false);
+  assert.ok(s.cool < PINCH_COOL && s.cool > 0, `cool=${s.cool}`);
+});
