@@ -15,6 +15,37 @@ const FLATTEN = 0.34;                // 원근 납작 타원 ry/rx
 const SPIRAL = 0.20;                 // 층마다 나선 오프셋
 const G = 1650;                      // 중력(월드/s^2)
 
+// ---- 카메라 제스처 상태 기계 (순수, node:test 대상) ----
+// 한 손: BUILD_INTERVAL마다 쌓기 발화 / 두 손: COLLAPSE_HOLD 유지 시 붕괴 1회
+// 발화 후 COLLAPSE_COOL 쿨다운. 손 개수 변화는 N_GRACE 유예로 프레임 드랍 흡수.
+export const BUILD_INTERVAL = 0.3;
+export const COLLAPSE_HOLD = 0.8;
+export const COLLAPSE_COOL = 3;
+export const N_GRACE = 0.25;
+
+export function makeGesture() {
+  return { n: 0, graceT: 0, holdT: 0, coolT: 0, buildT: 0 };
+}
+
+export function gestureStep(g, n, dt) {
+  const out = { build: false, collapse: false };
+  g.coolT = Math.max(0, g.coolT - dt);
+  if (n !== g.n) {
+    g.graceT += dt;                       // 다른 값이 유예 이상 지속돼야 전환
+    if (g.graceT >= N_GRACE) { g.n = n; g.graceT = 0; g.holdT = 0; g.buildT = 0; }
+  } else {
+    g.graceT = 0;
+  }
+  if (g.n === 1) {
+    g.buildT += dt;
+    if (g.buildT >= BUILD_INTERVAL) { g.buildT = 0; out.build = true; }
+  } else if (g.n === 2 && g.coolT <= 0) {
+    g.holdT += dt;
+    if (g.holdT >= COLLAPSE_HOLD) { g.holdT = 0; g.coolT = COLLAPSE_COOL; out.collapse = true; }
+  }
+  return out;
+}
+
 const rand = (a, b) => a + Math.random() * (b - a);
 const baseRx = () => Math.min(W, H) * 0.30;
 const tierH = () => baseRx() * 0.17;
