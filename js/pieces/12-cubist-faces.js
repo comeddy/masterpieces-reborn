@@ -23,6 +23,48 @@ const TEX = ["", "", "", "stripe", "dot", "hatch"];  // 다수는 평면, 일부
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const approach = (c, t, r, dt) => c + (t - c) * (1 - Math.exp(-r * dt));
 function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// ---- 카메라 손짓 판정 상태 기계 (순수, node:test 대상) ----
+// 손 x좌표(0..1)의 좌우 방향 반전을 세어 "흔들기"를 판정한다. 단방향 스침·
+// 몸 전체 이동은 반전이 없어 발화하지 않는다. 발화 후 WAVE_COOL 쿨다운,
+// 손 미검출은 HAND_GRACE 유예로 랜드마커 프레임 드랍을 흡수한다.
+export const WAVE_WINDOW = 1.2;   // 마지막 스윙 이후 유효 시간창(s)
+export const WAVE_SWINGS = 2;     // 발화에 필요한 방향 반전 횟수
+export const WAVE_MIN_VX = 0.25;  // 스윙으로 인정하는 최소 |x속도|(정규화폭/s)
+export const WAVE_COOL = 1.6;     // 발화 후 쿨다운(s)
+export const HAND_GRACE = 0.25;   // 손 미검출 유예(s)
+
+export function makeWave() {
+  return { lastX: -1, dir: 0, swings: 0, windowT: 0, coolT: 0, graceT: 0 };
+}
+
+export function waveStep(w, x, present, dt) {
+  w.coolT = Math.max(0, w.coolT - dt);
+  if (!present) {                          // 미검출: 유예 초과 시 스윙 상태 리셋
+    w.graceT += dt;
+    if (w.graceT >= HAND_GRACE) { w.lastX = -1; w.dir = 0; w.swings = 0; w.windowT = 0; }
+    return { fire: false };
+  }
+  w.graceT = 0;
+  if (w.lastX < 0 || dt <= 0) { w.lastX = x; return { fire: false }; }  // 첫 프레임: 기준점만
+  const vx = (x - w.lastX) / dt;
+  w.lastX = x;
+  if (w.dir !== 0) {                       // 제스처 진행 중에만 시간창이 흐른다
+    w.windowT += dt;
+    if (w.windowT > WAVE_WINDOW) { w.swings = 0; w.dir = 0; w.windowT = 0; }
+  }
+  if (Math.abs(vx) >= WAVE_MIN_VX) {
+    const d = vx > 0 ? 1 : -1;
+    if (w.dir === 0) { w.dir = d; w.windowT = 0; }            // 첫 유효 이동: 방향만 설정
+    else if (d !== w.dir) { w.dir = d; w.swings++; w.windowT = 0; }  // 반전 = 스윙 1회
+  }
+  if (w.swings >= WAVE_SWINGS && w.coolT <= 0) {
+    w.swings = 0; w.dir = 0; w.coolT = WAVE_COOL;
+    return { fire: true };
+  }
+  return { fire: false };
+}
+
 function centroid(p) { let x = 0, y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; }
 function area(p) { let a = 0; for (let i = 0, n = p.length; i < n; i++) { const j = (i + 1) % n; a += p[i][0] * p[j][1] - p[j][0] * p[i][1]; } return Math.abs(a) / 2; }
 function bbox(p) { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const q of p) { a = Math.min(a, q[0]); b = Math.min(b, q[1]); c = Math.max(c, q[0]); d = Math.max(d, q[1]); } return { x: a, y: b, w: c - a, h: d - b }; }
