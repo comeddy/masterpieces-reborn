@@ -71,6 +71,43 @@ export function pinchStep(s, ratio, dt) {
   return { fire: false };
 }
 
+// ---- fps 독립화·렌더 경량화 순수 수식 (node:test 대상) ----------------
+// 셸의 dt는 0.05s로 캡되어 저fps에서 슬로모션이 된다. 실제 경과(realDt)로 진행하되
+// 서브스텝으로 스프링 안정성을 지키고, 프레임당 임펄스·잔상은 dt에 맞춰 보정한다.
+export const SIM_MAX = 0.25;    // 탭 복귀 폭주 방지 상한(초)
+export const SUBSTEP = 0.02;    // 물리 서브스텝 최대(초) — spring 4.2·damping 3.4 안정 영역
+export const HOT_BRIGHT = 1.15; // 이 밝기 초과는 흰색 혼합(백열) 문자열 사용
+export const RECT_MAX = 2.0;    // 이 크기(px) 이하 입자는 arc 대신 fillRect
+
+export function simDt(realDt, dt) {
+  if (!Number.isFinite(realDt)) return dt;
+  return Math.min(SIM_MAX, Math.max(0, realDt));
+}
+
+export function substeps(sim, maxStep = SUBSTEP) {
+  if (!(sim > 0)) return [];
+  const n = Math.ceil(sim / maxStep - 1e-9);
+  return Array.from({ length: n }, () => sim / n);
+}
+
+// 프레임당 임펄스(scatter)를 60fps 기준으로 정규화: 10fps면 6배(상한), 120fps면 0.5배(하한)
+export function impulseScale(sim) {
+  return Math.min(6, Math.max(0.5, sim * 60));
+}
+
+// 잔상 알파: 60fps에서 0.34였던 페이드를 같은 벽시계 속도로 유지
+export function trailAlpha(sim) {
+  return 1 - Math.pow(1 - 0.34, sim * 60);
+}
+
+// lighter 합성에서 rgb×alpha가 더해지므로, 현행 "rgb×bright 채널 스케일 × 알파(0.28+0.5·bright)"와
+// 같은 기여량을 alpha 하나로 표현한다. bright>1 구간은 1로 포화(흰색 혼합 문자열이 백열을 근사).
+export function particleAlpha(bright) {
+  return Math.min(1, bright * Math.min(1, 0.28 + 0.5 * bright));
+}
+
+export function isHot(bright) { return bright > HOT_BRIGHT; }
+
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height;
