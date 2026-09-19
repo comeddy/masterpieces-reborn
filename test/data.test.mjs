@@ -61,3 +61,13 @@ test("cam 플래그는 boolean이다", () => {
   }
   assert.equal(WORKS.find((w) => w.no === "12").cam, true, "12번 카메라 손짓");
 });
+
+test("camHands는 있으면 1 또는 2이고 cam: true인 작품에만 있다", () => {
+  for (const w of WORKS) {
+    if ("camHands" in w) {
+      assert.ok(w.camHands === 1 || w.camHands === 2, `${w.no}.camHands`);
+      assert.equal(w.cam, true, `${w.no}: camHands는 cam: true가 필요`);
+    }
+  }
+  assert.equal(WORKS.find((w) => w.no === "03").camHands, 1, "03번은 주 손만 사용");
+});

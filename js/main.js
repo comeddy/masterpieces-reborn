@@ -56,7 +56,7 @@ camBtn.addEventListener("click", async () => {
   const my = ++camReqSeq;
   camBtn.disabled = true;
   camBtn.textContent = "📷 카메라 준비 중…";               // 모델 ~10MB 로드 피드백
-  const ok = await cam.request();
+  const ok = await cam.request({ numHands: (WORKS[current] && WORKS[current].camHands) || 2 });
   if (my !== camReqSeq) return; // 대기 중 뷰어 닫힘/전환 — cam.js가 자원 정리함
   camBtn.disabled = false;
   if (ok) {

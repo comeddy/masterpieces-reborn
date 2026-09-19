@@ -21,6 +21,15 @@ export function palmPoint(lm) {           // 검지 MCP(5)·중지 MCP(9) 중점
   return { x: (lm[5].x + lm[9].x) * 0.5, y: (lm[5].y + lm[9].y) * 0.5 };
 }
 
+// 워커/메인 어느 경로든 원본 랜드마크를 같은 규칙으로 캐시에 반영한다:
+// 21점 미만 손 제거 → 거울 보정 → 주 손 5·9 중점. 손 없으면 n:0에 직전 좌표 유지.
+export function applyLandmarks(raw, prevLast) {
+  const lmarks = mirrorLandmarks((raw || []).filter((lm) => lm && lm.length >= 21));
+  if (!lmarks.length) return { lmarks, last: { n: 0, x: prevLast.x, y: prevLast.y } };
+  const p = palmPoint(lmarks[0]);
+  return { lmarks, last: { n: Math.min(2, lmarks.length), x: p.x, y: p.y } };
+}
+
 export const STALE_MS = 500;  // 비디오 프레임이 이만큼 전진하지 않으면 손 결과를 비운다
 export function isStale(nowMs, lastAdvanceMs) { return nowMs - lastAdvanceMs > STALE_MS; }
 
@@ -28,13 +37,16 @@ let stream = null, vid = null, landmarker = null;
 let gen = 0;                   // stop()·재요청마다 증가 — 늦은 완료 무효화
 let lastVT = -1, lastAdvanceMs = 0, lmarks = [];
 let last = { n: 0, x: 0.5, y: 0.5 };
+let info = { mode: null, delegate: null, p50: null, renderer: null }; // stats() 백업 상태
 
 export function active() { return !!(stream && landmarker); }
+export function stats() { return { ...info }; }
 
-export async function request() {
+export async function request(opts = {}) {
   if (active()) return true;
+  const numHands = opts.numHands === 1 ? 1 : 2; // 03·01·11번처럼 주 손만 쓰면 추론 절반
   const my = ++gen;
-  let s = null, lm = null, v = null;
+  let s = null, lm = null, v = null, delegate = null;
   try {
     s = await navigator.mediaDevices.getUserMedia({
       video: { width: 640, height: 480, facingMode: "user" },
@@ -45,11 +57,12 @@ export async function request() {
     if (my !== gen) throw new Error("stale");
     const fileset = await vision.FilesetResolver.forVisionTasks(`${base}/wasm`);
     if (my !== gen) throw new Error("stale");
-    const mk = (delegate) => vision.HandLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODEL_URL, delegate },
-      runningMode: "VIDEO", numHands: 2,
+    const mk = (d) => vision.HandLandmarker.createFromOptions(fileset, {
+      baseOptions: { modelAssetPath: MODEL_URL, delegate: d },
+      runningMode: "VIDEO", numHands,
     });
-    try { lm = await mk("GPU"); } catch (_) { lm = await mk("CPU"); } // GPU 불가 환경 폴백
+    try { lm = await mk("GPU"); delegate = "GPU"; }
+    catch (_) { lm = await mk("CPU"); delegate = "CPU"; } // GPU 불가 환경 폴백
     if (my !== gen) throw new Error("stale");
     v = document.createElement("video");
     v.srcObject = s; v.muted = true; v.playsInline = true;
@@ -57,6 +70,7 @@ export async function request() {
     if (my !== gen) throw new Error("stale");
     stream = s; vid = v; landmarker = lm;
     lastVT = -1; lastAdvanceMs = performance.now(); lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
+    info = { mode: "main", delegate, p50: null, renderer: null };
     return true;
   } catch (e) {
     if (s) for (const t of s.getTracks()) t.stop(); // 늦은 완료·중간 실패 시 정리
@@ -81,14 +95,7 @@ function detect() {
   let res;
   try { res = landmarker.detectForVideo(vid, nowMs); }
   catch (e) { if (!detect.warned) { detect.warned = true; console.warn("손 탐지 실패 — 직전 결과 유지", e); } return; }
-  // 잘린 랜드마크 배열 방어: 21점 미만 손은 버린다(palmPoint가 5·9를 인덱싱)
-  lmarks = mirrorLandmarks((res.landmarks || []).filter((lm) => lm && lm.length >= 21));
-  if (lmarks.length) {
-    const p = palmPoint(lmarks[0]);
-    last = { n: Math.min(2, lmarks.length), x: p.x, y: p.y };
-  } else {
-    last = { n: 0, x: last.x, y: last.y };
-  }
+  ({ lmarks, last } = applyLandmarks(res.landmarks, last));
 }
 
 export function hands() { detect(); return last; }
@@ -129,4 +136,5 @@ export function stop() {
   if (landmarker) { try { landmarker.close(); } catch (_) {} }
   stream = null; vid = null; landmarker = null;
   lastVT = -1; lastAdvanceMs = 0; lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
+  info = { mode: null, delegate: null, p50: null, renderer: null };
 }
