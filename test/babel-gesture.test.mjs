@@ -1,7 +1,8 @@
 // test/babel-gesture.test.mjs — 10번 카메라 제스처 상태 기계(순수 로직) 검증
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { BUILD_INTERVAL, COLLAPSE_HOLD, COLLAPSE_COOL, N_GRACE, makeGesture, gestureStep }
+import { BUILD_INTERVAL, COLLAPSE_HOLD, COLLAPSE_COOL, N_GRACE, makeGesture, gestureStep,
+  IDLE_MIN, IDLE_MAX, makeIdle, idleStep }
   from "../js/pieces/10-tower-of-babel.js";
 
 // n을 유지한 채 sec초 동안 60fps로 돌리고 발화 횟수를 센다
@@ -51,4 +52,28 @@ test("손 없음(n=0)은 아무것도 발화하지 않는다", () => {
   const g = makeGesture();
   const r = run(g, 0, 3);
   assert.equal(r.builds + r.collapses, 0);
+});
+
+test("유휴 리셋: 입력으로 무장 후 한계 도달 시 1회 발동, 재입력 전 재발동 없음", () => {
+  const s = makeIdle();
+  const pick = () => 4;
+  let fired = 0;
+  for (let t = 0; t < 6; t += 1 / 60) if (idleStep(s, false, 1 / 60, pick)) fired++;
+  assert.equal(fired, 0);                       // 무장 전 유휴는 발동하지 않음
+  assert.equal(idleStep(s, true, 1 / 60, pick), false); // 입력 → 무장
+  for (let t = 0; t < 10; t += 1 / 60) if (idleStep(s, false, 1 / 60, pick)) fired++;
+  assert.equal(fired, 1);                       // 4초 뒤 정확히 1회, 이후 침묵
+  idleStep(s, true, 1 / 60, pick);              // 재입력 → 재무장
+  for (let t = 0; t < 5; t += 1 / 60) if (idleStep(s, false, 1 / 60, pick)) fired++;
+  assert.equal(fired, 2);                       // 재발동 가능
+});
+
+test("유휴 리셋: 입력이 이어지는 동안 타이머가 리셋되어 발동하지 않는다", () => {
+  const s = makeIdle();
+  let fired = 0;
+  for (let t = 0; t < 8; t += 1 / 60) {
+    const engaged = Math.floor(t) % 2 === 0;    // 2초 주기 on/off — 유휴가 3초를 못 채움
+    if (idleStep(s, engaged, 1 / 60, () => 3)) fired++;
+  }
+  assert.equal(fired, 0);
 });
