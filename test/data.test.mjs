@@ -59,4 +59,5 @@ test("cam 플래그는 boolean이다", () => {
   for (const w of WORKS) {
     if ("cam" in w) assert.equal(typeof w.cam, "boolean", `${w.no}.cam 타입`);
   }
+  assert.equal(WORKS.find((w) => w.no === "12").cam, true, "12번 카메라 손짓");
 });

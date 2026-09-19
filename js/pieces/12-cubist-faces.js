@@ -23,6 +23,48 @@ const TEX = ["", "", "", "stripe", "dot", "hatch"];  // 다수는 평면, 일부
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 const approach = (c, t, r, dt) => c + (t - c) * (1 - Math.exp(-r * dt));
 function mulberry32(a) { return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+// ---- 카메라 손짓 판정 상태 기계 (순수, node:test 대상) ----
+// 손 x좌표(0..1)의 좌우 방향 반전을 세어 "흔들기"를 판정한다. 단방향 스침·
+// 몸 전체 이동은 반전이 없어 발화하지 않는다. 발화 후 WAVE_COOL 쿨다운,
+// 손 미검출은 HAND_GRACE 유예로 랜드마커 프레임 드랍을 흡수한다.
+export const WAVE_WINDOW = 1.2;   // 마지막 스윙 이후 유효 시간창(s)
+export const WAVE_SWINGS = 2;     // 발화에 필요한 방향 반전 횟수
+export const WAVE_MIN_VX = 0.25;  // 스윙으로 인정하는 최소 |x속도|(정규화폭/s)
+export const WAVE_COOL = 1.6;     // 발화 후 쿨다운(s)
+export const HAND_GRACE = 0.25;   // 손 미검출 유예(s)
+
+export function makeWave() {
+  return { lastX: -1, dir: 0, swings: 0, windowT: 0, coolT: 0, graceT: 0 };
+}
+
+export function waveStep(w, x, present, dt) {
+  w.coolT = Math.max(0, w.coolT - dt);
+  if (!present) {                          // 미검출: 유예 초과 시 스윙 상태 리셋
+    w.graceT += dt;
+    if (w.graceT >= HAND_GRACE) { w.lastX = -1; w.dir = 0; w.swings = 0; w.windowT = 0; }
+    return { fire: false };
+  }
+  w.graceT = 0;
+  if (w.lastX < 0 || dt <= 0) { w.lastX = x; return { fire: false }; }  // 첫 프레임: 기준점만
+  const vx = (x - w.lastX) / dt;
+  w.lastX = x;
+  if (w.dir !== 0) {                       // 제스처 진행 중에만 시간창이 흐른다
+    w.windowT += dt;
+    if (w.windowT > WAVE_WINDOW) { w.swings = 0; w.dir = 0; w.windowT = 0; }
+  }
+  if (Math.abs(vx) >= WAVE_MIN_VX) {
+    const d = vx > 0 ? 1 : -1;
+    if (w.dir === 0) { w.dir = d; w.windowT = 0; }            // 첫 유효 이동: 방향만 설정
+    else if (d !== w.dir) { w.dir = d; w.swings++; w.windowT = 0; }  // 반전 = 스윙 1회
+  }
+  if (w.swings >= WAVE_SWINGS && w.coolT <= 0) {
+    w.swings = 0; w.dir = 0; w.coolT = WAVE_COOL;
+    return { fire: true };
+  }
+  return { fire: false };
+}
+
 function centroid(p) { let x = 0, y = 0; for (const q of p) { x += q[0]; y += q[1]; } return [x / p.length, y / p.length]; }
 function area(p) { let a = 0; for (let i = 0, n = p.length; i < n; i++) { const j = (i + 1) % n; a += p[i][0] * p[j][1] - p[j][0] * p[i][1]; } return Math.abs(a) / 2; }
 function bbox(p) { let a = 1e9, b = 1e9, c = -1e9, d = -1e9; for (const q of p) { a = Math.min(a, q[0]); b = Math.min(b, q[1]); c = Math.max(c, q[0]); d = Math.max(d, q[1]); } return { x: a, y: b, w: c - a, h: d - b }; }
@@ -50,6 +92,7 @@ let feat = null;           // 이목구비 파라미터(정면/측면)
 let asm = 1;               // 조립도 1=완성, 0=흩어짐
 let state = "idle";        // idle | out | in
 let pressX = 0, pressY = 0, dragging = false;
+let cam = null, wav = null, handOn = false, handX = 0, handY = 0; // 카메라 손 입력
 
 // ---- 머리 실루엣(볼록 달걀형) — 시드 지터 ----
 function buildHead(rng) {
@@ -251,12 +294,30 @@ function drawFeatures(alpha) {
   ctx.globalAlpha = 1;
 }
 
+// --- 손 커서: 팔레트 정합 노랑 글로우 점 — 쿨다운 중엔 옅게(장전 안 됨) ---
+function drawHandCursor() {
+  if (!handOn) return;
+  const r = Math.min(W, H) * 0.02;
+  const a = wav.coolT > 0 ? 0.35 : 0.85;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const g = ctx.createRadialGradient(handX, handY, 0, handX, handY, r * 2.2);
+  g.addColorStop(0, `rgba(240,207,107,${a})`);   // YELLOW[1] 계열
+  g.addColorStop(1, "rgba(240,207,107,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(handX, handY, r * 2.2, 0, 6.283); ctx.fill();
+  ctx.restore();
+}
+
 function rebuild() { buildPortrait(Math.floor(Math.random() * 2 ** 31)); asm = 0; }
 
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height; reduced = !!opts.reducedMotion;
     T = 0; asm = 1; state = "idle"; dragging = false;
+    cam = opts.cam || null;
+    wav = makeWave();
+    handOn = false;
     this.resize(W, H);
     buildPortrait(Math.floor(Math.random() * 2 ** 31));  // 첫 초상은 조립된 상태
     asm = 1;
@@ -278,25 +339,35 @@ export default {
       dragging = false;
     }
 
+    // ---- 카메라 손짓: 좌우로 크게 흔들면 재조립, 손 위치는 면 밀기 가상 포인터 ----
+    handOn = false;
+    if (cam && cam.active()) {
+      const h = cam.hands();
+      if (waveStep(wav, h.x, h.n >= 1, dt).fire && state === "idle") state = "out";
+      if (h.n >= 1) { handOn = true; handX = h.x * W; handY = h.y * H; }
+    }
+
     // ---- 재조립 상태 기계(dt 기반 전이) ----
     if (state === "out") { asm = approach(asm, -0.08, reduced ? 12 : 7, dt); if (asm < 0.06) { rebuild(); state = "in"; } }
     else if (state === "in") { asm = approach(asm, 1, reduced ? 12 : 6.5, dt); if (asm > 0.985) { asm = 1; state = "idle"; } }
 
-    // ---- 드래그: 커서 주변 면 밀림·기울기, 놓으면 스프링 안착 ----
-    const active = dragging && state === "idle";
+    // ---- 면 밀기: 입력원은 ① 마우스 드래그 ② 카메라 손 (드래그 우선) ----
+    const drag = dragging && state === "idle";
+    const push = drag || (handOn && state === "idle");
+    const pushX = drag ? ptr.x : handX, pushY = drag ? ptr.y : handY;
     const R = baseS * 0.85;
     for (const f of facets) {
       let tox = 0, toy = 0, trot = 0;
-      if (active) {
-        const cs = toScreen(f.cx, f.cy), d = Math.hypot(cs[0] - ptr.x, cs[1] - ptr.y);
+      if (push) {
+        const cs = toScreen(f.cx, f.cy), d = Math.hypot(cs[0] - pushX, cs[1] - pushY);
         if (d < R) {
           const fall = 1 - d / R;
-          tox = (cs[0] - ptr.x) / baseS * fall * 0.55;
-          toy = (cs[1] - ptr.y) / baseS * fall * 0.55;
-          trot = ((cs[0] - ptr.x) >= 0 ? 1 : -1) * fall * 0.5;
+          tox = (cs[0] - pushX) / baseS * fall * 0.55;
+          toy = (cs[1] - pushY) / baseS * fall * 0.55;
+          trot = ((cs[0] - pushX) >= 0 ? 1 : -1) * fall * 0.5;
         }
       }
-      const rate = active ? 12 : 7;   // 놓으면 스프링 안착
+      const rate = push ? 12 : 7;   // 놓으면 스프링 안착
       f.dox = approach(f.dox, tox, rate, dt);
       f.doy = approach(f.doy, toy, rate, dt);
       f.drot = approach(f.drot, trot, rate, dt);
@@ -313,7 +384,8 @@ export default {
     // 이목구비는 대체로 조립됐을 때만 또렷이(재조립 중 흐려짐)
     const fa = clamp((asm - 0.6) / 0.4, 0, 1);
     if (fa > 0.01) drawFeatures(fa);
+    drawHandCursor();
   },
 
-  dispose() { ctx = null; head = null; facets = []; feat = null; },
+  dispose() { ctx = null; head = null; facets = []; feat = null; cam = null; wav = null; },
 };
