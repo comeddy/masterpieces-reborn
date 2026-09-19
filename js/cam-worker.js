@@ -7,6 +7,9 @@ let vision = null, landmarker = null, delegate = null, numHands = 2, model = "",
 let prevTs = -1;
 const SW_RENDERER = /SwiftShader|llvmpipe|Software|Basic Render/i;
 const GPU_SLOW_MS = 40;   // GPU 델리게이트 벤치 p50이 이보다 크면 CPU로
+// 준비 진행 하트비트 — cam.js는 마지막 메시지 뒤 일정 시간 무응답일 때만 실패로 본다.
+// 한계: 모델(7.8MB) 다운로드는 createFromOptions 내부라 진행 이벤트가 없다(create:* 직전 구간이 가장 긴 무응답).
+const progress = (stage) => self.postMessage({ type: "progress", stage });
 
 function rendererName() {
   try {
@@ -43,8 +46,8 @@ async function bench(lm) {
 
 async function init(m) {
   model = m.model; numHands = m.numHands === 1 ? 1 : 2;
-  vision = await import(`${m.base}/vision_bundle.mjs`);
-  fileset = await vision.FilesetResolver.forVisionTasks(`${m.base}/wasm`);
+  vision = await import(`${m.base}/vision_bundle.mjs`); progress("import");
+  fileset = await vision.FilesetResolver.forVisionTasks(`${m.base}/wasm`); progress("fileset");
   const renderer = rendererName();
   let p50 = null;
   // 소프트웨어 GL(SwiftShader·llvmpipe 등)에서는 GPU 델리게이트가 CPU보다 느릴 뿐 아니라
@@ -52,15 +55,18 @@ async function init(m) {
   // 그 외 환경은 GPU를 벤치해 p50이 느리면(>GPU_SLOW_MS) CPU로, 생성·벤치 예외도 CPU로.
   if (!SW_RENDERER.test(renderer)) {
     try {
-      landmarker = await create("GPU"); delegate = "GPU";
-      p50 = await bench(landmarker);
+      landmarker = await create("GPU"); delegate = "GPU"; progress("create:GPU");
+      p50 = await bench(landmarker); progress("bench:GPU");
       if (p50 > GPU_SLOW_MS) { try { landmarker.close(); } catch (_) {} landmarker = null; }
     } catch (_) {
       if (landmarker) { try { landmarker.close(); } catch (_) {} }  // GPU 생성 후 벤치 실패 시 누수 방지
       landmarker = null;
     }
   }
-  if (!landmarker) { landmarker = await create("CPU"); delegate = "CPU"; p50 = await bench(landmarker); }
+  if (!landmarker) {
+    landmarker = await create("CPU"); delegate = "CPU"; progress("create:CPU");
+    p50 = await bench(landmarker); progress("bench:CPU");
+  }
   prevTs = -1;
   self.postMessage({ type: "ready", delegate, p50: Math.round(p50), renderer });
 }
@@ -77,6 +83,8 @@ async function onFrame(m) {
     if (/timestamp/i.test(String(e && e.message))) {                // 타임스탬프 오류는 인스턴스가 망가짐 → 재생성
       try { landmarker.close(); } catch (_) {}
       landmarker = await create(delegate); prevTs = -1;
+    } else if (!onFrame.warned) {                                     // 그 외 추론 예외: 빈 결과 유지, 1회만 경고
+      onFrame.warned = true; console.warn("[cam-worker] 추론 예외 — 빈 결과 유지", String(e && e.message || e));
     }
   } finally {
     try { m.frame.close(); } catch (_) {}

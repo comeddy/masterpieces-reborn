@@ -37,14 +37,19 @@ export function isStale(nowMs, lastAdvanceMs) { return nowMs - lastAdvanceMs > S
 
 let stream = null, vid = null, landmarker = null;      // landmarker는 메인 스레드 폴백 전용
 let worker = null, inFlight = false, inFlightSince = 0;   // 워커 모드 상태(한 프레임만 진행 중)
+let pendingWorker = null, pendingAbort = null; // startWorker() 대기 중인 워커·취소 함수 — stop()이 terminate+타이머 정리
+let workerCfg = null;          // 워커 생성 파라미터 { base, numHands } — 준비 후 사망 시 동일 파라미터로 1회 재시작
+let restarting = false, failStreak = 0; // 재시작 진행 중(active() 유지, detect()는 건너뜀) / 연속 fail 메시지 수
 let seamOn = false;            // E2E 시임(window.__CAM_CDN__) 활성 — frame 메시지에 가짜 손 동봉
-const READY_TIMEOUT_MS = 20000, INFLIGHT_WATCHDOG_MS = 3000;
+const READY_IDLE_MS = 25000;   // 워커 준비 대기: 마지막 메시지(progress/ready/fail) 뒤 이 시간 무응답이면 실패
+const INFLIGHT_WATCHDOG_MS = 3000;
+const FAIL_RESTART_N = 3;      // 준비 후 fail 메시지가 연속 이만큼이면 워커 재시작
 let gen = 0;                   // stop()·재요청마다 증가 — 늦은 완료 무효화
 let lastVT = -1, lastAdvanceMs = 0, lmarks = [];
 let last = { n: 0, x: 0.5, y: 0.5 };
 let info = { mode: null, delegate: null, p50: null, renderer: null }; // stats() 백업 상태
 
-export function active() { return !!(stream && (landmarker || worker)); }
+export function active() { return !!(stream && (landmarker || worker || restarting)); }
 export function stats() { return { ...info }; }
 
 export async function request(opts = {}) {
@@ -60,7 +65,7 @@ export async function request(opts = {}) {
     const base = cdnBase();
     const seam = typeof window !== "undefined" && !!window.__CAM_CDN__;
     // 1) 워커 경로: 추론을 메인 스레드 밖으로
-    const r = await startWorker(base, numHands).catch((e) => { console.warn("[cam] 워커 불가 — 메인 스레드 폴백", e); return null; });
+    const r = await startWorker(base, numHands).catch((e) => { if (e.message !== "stale") console.warn("[cam] 워커 불가 — 메인 스레드 폴백", e); return null; });
     if (r) { w = r.w; nfo = r.info; }
     if (my !== gen) throw new Error("stale");
     if (!w) {
@@ -82,6 +87,7 @@ export async function request(opts = {}) {
     await v.play();
     if (my !== gen) throw new Error("stale");
     stream = s; vid = v; landmarker = lm; worker = w; inFlight = false; seamOn = seam;
+    workerCfg = w ? { base, numHands } : null; restarting = false; failStreak = 0;
     lastVT = -1; lastAdvanceMs = performance.now(); lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
     info = nfo;
     console.info(`[cam] mode=${info.mode} delegate=${info.delegate} p50=${info.p50 ?? "-"}ms renderer=${info.renderer ?? "-"}`);
@@ -96,23 +102,35 @@ export async function request(opts = {}) {
   }
 }
 
-// 워커 생성 → init → ready 대기(타임아웃). 실패는 throw. 성공 시 { w, info }를 넘기고
-// 모듈 상태(info)는 request()가 세대 가드 통과 후에만 반영한다.
+// 워커 생성 → init → ready 대기. 고정 타임아웃 대신 워커의 단계별 progress 하트비트를 받아
+// 마지막 메시지 뒤 READY_IDLE_MS 무응답일 때만 실패로 판정한다(진행 중이면 계속 대기).
+// 한계: 모델(7.8MB) 다운로드는 createFromOptions 내부라 진행 이벤트가 없다 — 그 구간 하나가
+// READY_IDLE_MS를 넘기면 타임아웃 → 메인 폴백. 대기 중 워커는 pendingWorker에 두고 stop()이
+// pendingAbort()로 terminate + 타이머 정리 + reject("stale") 한다. 성공 시 { w, info }를 넘기고
+// 모듈 상태(info)는 호출자가 세대 가드 통과 후에만 반영한다.
 function startWorker(base, numHands) {
   return new Promise((resolve, reject) => {
+    if (pendingAbort) pendingAbort();        // 이전 대기(더 오래된 request)는 무효 — 하나만 대기
     let w;
     try { w = new Worker(new URL("./cam-worker.js", import.meta.url)); }   // 클래식 워커(type 없음)
     catch (e) { reject(e); return; }
-    const timer = setTimeout(() => { w.terminate(); reject(new Error("worker ready timeout")); }, READY_TIMEOUT_MS);
-    w.onerror = (e) => { clearTimeout(timer); w.terminate(); reject(e.error || new Error(e.message || "worker error")); };
+    let timer = null;
+    const finish = (err, val) => {
+      clearTimeout(timer); pendingWorker = null; pendingAbort = null;
+      if (err) { try { w.terminate(); } catch (_) {} reject(err); } else resolve(val);
+    };
+    const arm = () => { clearTimeout(timer); timer = setTimeout(() => finish(new Error("worker ready timeout")), READY_IDLE_MS); };
+    pendingWorker = w; pendingAbort = () => finish(new Error("stale"));
+    w.onerror = (e) => finish(e.error || new Error(e.message || "worker error"));
     w.onmessage = (ev) => {
       const m = ev.data;
-      if (m.type === "ready") {
-        clearTimeout(timer);
-        w.onmessage = onWorkerMessage; w.onerror = (e) => console.warn("[cam] 워커 오류", e.message || e);
-        resolve({ w, info: { mode: "worker", delegate: m.delegate, p50: m.p50, renderer: m.renderer } });
-      } else if (m.type === "fail") { clearTimeout(timer); w.terminate(); reject(new Error(m.msg)); }
+      if (m.type === "progress") arm();                                   // 단계 진행 — 대기 연장
+      else if (m.type === "ready") {
+        w.onmessage = onWorkerMessage; w.onerror = onWorkerDied;
+        finish(null, { w, info: { mode: "worker", delegate: m.delegate, p50: m.p50, renderer: m.renderer } });
+      } else if (m.type === "fail") finish(new Error(m.msg));
     };
+    arm();
     w.postMessage({ type: "init", base, model: MODEL_URL, numHands });
   });
 }
@@ -122,9 +140,36 @@ function onWorkerMessage(ev) {
   const m = ev.data;
   if (m.type === "result") {
     ({ lmarks, last } = applyLandmarks(m.landmarks, last));
-    inFlight = false;
+    inFlight = false; failStreak = 0;
   } else if (m.type === "fail") {
     console.warn("[cam] 워커 추론 실패", m.msg); inFlight = false;
+    if (++failStreak >= FAIL_RESTART_N) restartWorker(`fail ${failStreak}회 연속: ${m.msg}`);
+  }
+}
+
+function onWorkerDied(e) {                            // 준비 후 워커 onerror(스크립트 예외·크래시)
+  if (e.target !== worker) return;
+  restartWorker(`onerror: ${e.message || e}`);
+}
+
+// 준비 후 워커가 죽으면 같은 파라미터로 1회 재시작. 재시작 중 active()는 유지하되 detect()는 워커 없음으로
+// 건너뛰고(죽은 워커의 손 결과는 즉시 비움), 재시작도 실패하면 세션을 내려(stop) active()가 false가 되게 한다.
+async function restartWorker(reason) {
+  if (!worker || restarting || !workerCfg) return;
+  try { worker.terminate(); } catch (_) {}
+  worker = null; inFlight = false; failStreak = 0; restarting = true;
+  lmarks = []; last = { n: 0, x: last.x, y: last.y };
+  const my = gen, cfg = workerCfg;
+  try {
+    const r = await startWorker(cfg.base, cfg.numHands);
+    if (my !== gen) { try { r.w.terminate(); } catch (_) {} return; }   // 재시작 중 stop()·재요청됨
+    worker = r.w; info = r.info; restarting = false;
+    console.warn(`[cam] 워커 재시작 — ${reason}`);
+  } catch (e) {
+    if (my !== gen) return;                                             // stop()이 대기를 취소(stale) — 조용히
+    restarting = false;
+    console.warn("[cam] 워커 중단 — 카메라 버튼을 다시 눌러 주세요", reason, e);
+    stop();                                                             // active() false + 카메라 표시등 끄기
   }
 }
 
@@ -151,6 +196,7 @@ function detect() {
     sendFrame(nowMs);                                             // 비동기 — detect()는 동기 유지
     return;
   }
+  if (!landmarker) return;                                        // 워커 재시작 중 — 이 프레임은 건너뜀
   let res;
   try { res = landmarker.detectForVideo(vid, nowMs); }
   catch (e) { if (!detect.warned) { detect.warned = true; console.warn("손 탐지 실패 — 직전 결과 유지", e); } return; }
@@ -160,8 +206,8 @@ function detect() {
 // 현재 비디오 프레임을 워커로 이전(transfer). VideoFrame 우선, 없으면 createImageBitmap.
 async function sendFrame(ts) {
   const w = worker, v = vid;
+  let frame;
   try {
-    let frame;
     if (typeof VideoFrame !== "undefined") { try { frame = new VideoFrame(v); } catch (_) {} }
     if (!frame) frame = await createImageBitmap(v);
     if (worker !== w) { try { frame.close(); } catch (_) {} return; }   // 대기 중 stop()됨
@@ -169,6 +215,7 @@ async function sendFrame(ts) {
     if (seamOn && typeof window !== "undefined") msg.fake = window.__FAKE_HANDS__ || { n: 0, x: 0.5, y: 0.5 };
     w.postMessage(msg, [frame]);
   } catch (e) {
+    try { if (frame) frame.close(); } catch (_) {}   // postMessage 실패(DataCloneError 등) 시 프레임 누수 방지
     inFlight = false;
     if (!sendFrame.warned) { sendFrame.warned = true; console.warn("[cam] 프레임 전송 실패", e); }
   }
@@ -207,11 +254,14 @@ export function drawMirror(ctx, rect) {
 
 export function stop() {
   gen++;                                    // 대기 중 request()의 늦은 완료 무효화
+  if (pendingAbort) pendingAbort();         // 대기 중(startWorker) 워커 terminate + 타이머 정리 + reject("stale")
   if (stream) for (const t of stream.getTracks()) t.stop(); // 카메라 표시등 끄기
   if (vid) vid.srcObject = null;
   if (landmarker) { try { landmarker.close(); } catch (_) {} }
   if (worker) { try { worker.terminate(); } catch (_) {} }  // 워커 종료(진행 중 프레임도 함께 폐기)
-  stream = null; vid = null; landmarker = null; worker = null; inFlight = false; seamOn = false;
+  stream = null; vid = null; landmarker = null; worker = null; workerCfg = null;
+  inFlight = false; restarting = false; failStreak = 0; seamOn = false;
+  detect.warned = detect.hung = sendFrame.warned = false;  // 1회 경고 플래그 리셋 — 다음 세션에서 다시 경고
   lastVT = -1; lastAdvanceMs = 0; lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
   info = { mode: null, delegate: null, p50: null, renderer: null };
 }
