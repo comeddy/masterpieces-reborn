@@ -343,8 +343,13 @@ export default {
     handOn = false;
     if (cam && cam.active()) {
       const h = cam.hands();
-      if (waveStep(wav, h.x, h.n >= 1, dt).fire && state === "idle") state = "out";
-      if (h.n >= 1) { handOn = true; handX = h.x * W; handY = h.y * H; }
+      // 비정상 값(NaN)이 커서 그라디언트를 깨지 않도록 유한값만 수용 (11번 선례)
+      const ok = h.n >= 1 && Number.isFinite(h.x) && Number.isFinite(h.y);
+      if (waveStep(wav, ok ? h.x : 0.5, ok, dt).fire && state === "idle") state = "out";
+      if (ok) { handOn = true; handX = h.x * W; handY = h.y * H; }
+    } else {
+      // 카메라 꺼짐: 손 없음으로 흘려 스윙 상태를 풀고 쿨다운은 계속 감소 — 재활성 시 점프 속도 오발 방지 (03번 선례)
+      waveStep(wav, 0.5, false, dt);
     }
 
     // ---- 재조립 상태 기계(dt 기반 전이) ----

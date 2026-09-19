@@ -32,6 +32,7 @@
 - `request(): Promise<boolean>` / `active(): boolean` / `stop(): void`
 - `hands(): { n: 0|1|2, x, y }` — 주 손 손바닥 대표점, 0..1 정규화, x 거울 보정
 - `video(): HTMLVideoElement | null`, `landmarks(): Array` — 코너 미러용
+  (**2026-09-19 갱신**: 코너 미러는 사용자 피드백으로 전 카메라 작품에서 제거됨 — cc76b26·9987bac)
 - 세대(gen) 가드, `window.__CAM_CDN__` E2E 시임, MediaPipe `@mediapipe/tasks-vision`
   CDN 동적 import (모듈 레벨 정적 import 금지 — node import-safe)
 
@@ -49,7 +50,7 @@
 
 - `work.cam === true`일 때 `#v-cam` 버튼(`viewer__cam`) 노출, `camReqSeq`
   시퀀스 가드, 성공 "📷 손을 비춰보세요" / 실패 "카메라를 사용할 수 없어요 —
-  클릭으로 체험하세요", `closeWork()`에서 무조건 `cam.stop()`.
+  마우스로 체험하세요"(병합 후 master 문구), `closeWork()`에서 무조건 `cam.stop()`.
 - 작품 opts에 `cam: { active, hands, video, landmarks }` getter 묶음 추가.
 
 ### js/data.js — 12번 항목
@@ -94,7 +95,8 @@ waveStep(w, x, present, dt) → { fire: boolean }
 - **손 커서**: 검출 위치에 팔레트 정합 글로우 점(크림·노랑 계열,
   `rgba(240,207,107,…)` 소프트 래디얼). 쿨다운 중에는 알파를 낮춰
   "장전 안 됨"을 은은히 표현.
-- **코너 미러**: 10번 계획서 Task 5와 동일 코드 — 우하단(폭 18%, 최대 200px)
+- **코너 미러 (제거됨)**: 03·10번 사용자 피드백(cc76b26)과 동일하게 12번도 9987bac에서
+  미러 렌더를 제거 — 손 커서만 유지. 원 설계(역사 기록): 우하단(폭 18%, 최대 200px)
   좌우반전 `video()` 프레임 + `landmarks()` 점 오버레이. `cam.active()`일 때만.
   (카메라 작품이 늘어난 뒤 공용 헬퍼로 리팩터하는 것은 병합 후 후속 과제.)
 - `init`에서 `cam = opts.cam ?? null`, `dispose`에서 `cam = null`.
@@ -122,7 +124,7 @@ waveStep(w, x, present, dt) → { fire: boolean }
   (|vx|<WAVE_MIN_VX) 미발화.
 - 12번 모듈 import-safe 유지 (integrity.test.mjs 자동 통과 — 카메라는 opts 주입).
 - Playwright 시각 검증: `window.__CAM_CDN__` 가짜 MediaPipe 픽스처(10번 Task 6
-  선례)로 hands() 시퀀스를 흘려 재조립 발화·면 밀림·손 커서·코너 미러 렌더 확인.
+  선례)로 hands() 시퀀스를 흘려 재조립 발화·면 밀림·손 커서 렌더 확인(미러는 제거됨).
 - 실제 카메라 E2E는 배포 전 로컬(HTTPS/localhost)에서 수동 1회.
 
 ## 하지 않는 것 (YAGNI)

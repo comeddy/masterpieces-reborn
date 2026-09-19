@@ -18,7 +18,7 @@ Every screen below is rendered live and responds to your cursor. | 아래 모든
 |:---:|:---:|
 | **Wing I · After Hokusai — Great Wave** (가나가와 해변의 높은 파도)<br>Thousands of water particles gather into the wave and crash on their own<br>수천 개의 물 입자가 파도로 응집하고 스스로 부서집니다 | **Wing II · After Monet — Impression, Sunrise** (인상, 해돋이)<br>Click and the sun bursts with radiant beams<br>클릭하면 태양이 눈부신 광선을 사방으로 뻗습니다 |
 | ![Hommage à Picasso — Simultaneous Faces](docs/images/preview-12-picasso.jpg) | ![After Kim Hong-do — Ssireum](docs/images/preview-14-ssireum.jpg) |
-| **Wing III · Hommage à Picasso — Simultaneous Faces** (동시의 얼굴)<br>Every click reassembles an entirely new cubist portrait<br>클릭할 때마다 전혀 새로운 큐비즘 초상으로 재조립됩니다 | **Wing IV · After Kim Hong-do — Ssireum** (씨름)<br>The wrestlers take the stage as paper puppets on sticks<br>씨름꾼이 막대에 붙은 종이 인형이 되어 무대에 오릅니다 |
+| **Wing III · Hommage à Picasso — Simultaneous Faces** (동시의 얼굴)<br>Every click — or a wave of your hand on camera — reassembles an entirely new cubist portrait<br>클릭하거나 카메라 앞에서 손을 흔들 때마다 전혀 새로운 큐비즘 초상으로 재조립됩니다 | **Wing IV · After Kim Hong-do — Ssireum** (씨름)<br>The wrestlers take the stage as paper puppets on sticks<br>씨름꾼이 막대에 붙은 종이 인형이 되어 무대에 오릅니다 |
 
 ---
 
@@ -126,6 +126,7 @@ python3 -m http.server 8090
 - In Tower of Babel (No. 10), press 📷 and raise one hand to build, or hold up both hands for a moment to collapse the tower
 - In The Tree of Life (No. 11), press 📷 and hold up a hand: new golden branches sprout toward wherever your hand lingers, and sweeping it sideways stirs the wind through the whole tree. The mouse keeps working as a fallback
 - In Girl with a Pearl Earring (No. 03), press 📷 and your hand becomes the candle: sweep it to blow the light-dust away, and pinch thumb and index fingertips together to make the flame flicker in a wave of light. The mouse keeps working as a fallback
+- In Simultaneous Faces (No. 12), press 📷 and wave your hand from side to side: the cubist portrait scatters and reassembles into an entirely new face. Move your hand slowly to push the facets and twist the viewpoints. The mouse keeps working as a fallback
 
 Deploy your own copy (creates an S3 bucket and CloudFront distribution on first run):
 
@@ -283,6 +284,7 @@ python3 -m http.server 8090
 - 10번 바벨탑에서 📷를 누르고 한 손을 들면 탑이 쌓이고, 두 손을 잠시 들고 있으면 무너집니다
 - 11번 생명의 나무에서 📷를 누르고 손을 들면 손이 머무는 자리로 금빛 가지가 돋아 자라고, 좌우로 휘두르면 나무 전체에 바람이 입니다. 마우스로도 그대로 가능합니다
 - 03번 진주 귀걸이를 한 소녀에서 📷를 누르면 손이 촛불이 됩니다. 손을 휙 저으면 빛 먼지가 흩날리고, 엄지와 검지 끝을 맞대면 촛불이 깜빡이며 빛의 파동이 퍼집니다. 마우스로도 그대로 가능합니다
+- 12번 동시의 얼굴에서 📷를 누르고 손을 좌우로 크게 흔들면 큐비즘 초상이 흩어졌다 전혀 새로운 얼굴로 재조립됩니다. 손을 천천히 움직이면 면들이 밀리며 시점이 비틀립니다. 마우스로도 그대로 가능합니다
 
 직접 배포하려면(최초 실행 시 S3 버킷과 CloudFront 배포를 생성합니다):
 
