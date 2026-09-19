@@ -10,6 +10,7 @@ let debris = [];  // 붕괴 파편(월드 물리) / dust: 흙먼지 / clouds: �
 let dust = [], clouds = [];
 let buildTimer = 0, buildInterval = 2.5, heldTime = 0, collapseDone = false;
 let cam = null, gest = null, handPt = { x: 0, y: 0, n: 0 }; // 카메라 제스처 입력
+let idle = null;                     // 유휴 리셋 상태 (관객 이탈 감지)
 
 const BRICK = [168, 103, 74];        // #a8674a
 const FLATTEN = 0.34;                // 원근 납작 타원 ry/rx
@@ -46,6 +47,28 @@ export function gestureStep(g, n, dt) {
     if (g.holdT >= COLLAPSE_HOLD) { g.holdT = 0; g.coolT = COLLAPSE_COOL; out.collapse = true; }
   }
   return out;
+}
+
+// ---- 유휴 리셋 상태 기계 (순수, node:test 대상) ----
+// 사용자 입력으로 무장(arm)되고, 이후 limit(3~5s)초 무입력이면 1회 발동 후 해제.
+// 미무장 유휴에서는 발동하지 않는다 — 관객이 떠날 때 한 번만 리셋.
+export const IDLE_MIN = 3;
+export const IDLE_MAX = 5;
+
+export function makeIdle() {
+  return { armed: false, t: 0, limit: 0 };
+}
+
+export function idleStep(s, engaged, dt, pick) {
+  if (engaged) {
+    if (!s.armed) s.limit = pick();     // 무장 시점에 한계 확정(사이클마다 랜덤)
+    s.armed = true; s.t = 0;
+    return false;
+  }
+  if (!s.armed) return false;
+  s.t += dt;
+  if (s.t >= s.limit) { s.armed = false; s.t = 0; return true; }
+  return false;
 }
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -134,6 +157,15 @@ function collapseFrom(from) {
   });
 }
 
+// --- 유휴 리셋: 전체 붕괴 후 밑동 3층을 낙하 벽돌로 재건 ---
+function resetTower() {
+  collapseFrom(0);
+  for (let t = 0; t < 3; t++) {
+    ensureTier(t);
+    for (let i = 0; i < tiers[t].cap; i++) placeSlot(t, i);
+  }
+}
+
 function initClouds() {
   clouds = [];
   const n = 3 + (Math.random() * 2 | 0);
@@ -174,6 +206,9 @@ function update(dt, ptr) {
   } else {
     handPt.n = 0;
   }
+  // 유휴 리셋: 관객이 떠나고 3~5초가 지나면 탑 전체가 무너지고 밑동부터 다시 시작
+  const engaged = (ptr.inside && ptr.down) || ptr.justDown || handPt.n >= 1;
+  if (idleStep(idle, engaged, dt, () => rand(IDLE_MIN, IDLE_MAX))) resetTower();
   buildTimer += dt;                                      // 자동 건설(2~3s)
   if (buildTimer >= buildInterval) { buildTimer = 0; buildInterval = rand(2, 3); placeNextAuto(); }
   // 높이 상한: 하늘에 닿을 듯하면 상부가 스스로 무너진다 — 끝없는 오만과 붕괴의 순환
@@ -307,6 +342,7 @@ export default {
     cam = opts.cam || null;
     gest = makeGesture();
     handPt = { x: 0, y: 0, n: 0 };
+    idle = makeIdle();
     initClouds();
     for (let t = 0; t < 3; t++) {                        // 밑동 몇 층 미리 세움
       const cap = capAt(t); ensureTier(t);
@@ -319,5 +355,5 @@ export default {
   },
   tick(dt, ptr) { update(dt, ptr); drawSky(); drawTower(); drawHandCursors(); },
   resize(w, h) { W = w; H = h; cx = W * 0.5; groundY = H * 0.80; },
-  dispose() { ctx = null; tiers = []; blocks = []; debris = []; dust = []; clouds = []; cam = null; gest = null; },
+  dispose() { ctx = null; tiers = []; blocks = []; debris = []; dust = []; clouds = []; cam = null; gest = null; idle = null; },
 };
