@@ -1,7 +1,7 @@
 // test/cam.test.mjs — cam.js 순수 헬퍼(거울 보정·손바닥 대표점) 검증. 브라우저 API 미참조.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mirrorLandmarks, palmPoint, STALE_MS, isStale } from "../js/cam.js";
+import { mirrorLandmarks, palmPoint, STALE_MS, isStale, applyLandmarks } from "../js/cam.js";
 
 const pt = (x, y) => ({ x, y, z: 0 });
 const hand = (fn) => Array.from({ length: 21 }, (_, i) => fn(i));
@@ -34,4 +34,25 @@ test("isStale: 프레임이 STALE_MS 넘게 전진하지 않으면 노후", () =
   assert.equal(isStale(1000, 1000), false);
   assert.equal(isStale(1000 + STALE_MS, 1000), false, "경계는 아직 유효");
   assert.equal(isStale(1000 + STALE_MS + 1, 1000), true);
+});
+
+test("applyLandmarks: 21점 미만 손은 버리고, 거울 보정 후 5·9 중점을 last로", () => {
+  const raw = [
+    Array.from({ length: 21 }, (_, i) => ({ x: i === 5 ? 0.2 : i === 9 ? 0.4 : 0.3, y: 0.6, z: 0 })),
+    Array.from({ length: 10 }, () => ({ x: 0.9, y: 0.9, z: 0 })),          // 잘린 손 → 제거
+  ];
+  const { lmarks, last } = applyLandmarks(raw, { n: 0, x: 0.1, y: 0.1 });
+  assert.equal(lmarks.length, 1);
+  assert.equal(last.n, 1);
+  assert.ok(Math.abs(last.x - (1 - 0.3)) < 1e-12 && Math.abs(last.y - 0.6) < 1e-12);
+});
+
+test("applyLandmarks: 손 없음이면 n:0에 직전 좌표 유지, 두 손이면 n:2", () => {
+  const prev = { n: 1, x: 0.33, y: 0.44 };
+  const none = applyLandmarks([], prev);
+  assert.deepEqual(none.lmarks, []);
+  assert.deepEqual(none.last, { n: 0, x: 0.33, y: 0.44 });
+  const hand = Array.from({ length: 21 }, () => ({ x: 0.5, y: 0.5, z: 0 }));
+  assert.equal(applyLandmarks([hand, hand], prev).last.n, 2);
+  assert.equal(applyLandmarks(undefined, prev).last.n, 0, "undefined 입력도 손 없음");
 });

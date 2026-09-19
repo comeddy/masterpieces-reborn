@@ -56,7 +56,7 @@ camBtn.addEventListener("click", async () => {
   const my = ++camReqSeq;
   camBtn.disabled = true;
   camBtn.textContent = "📷 카메라 준비 중…";               // 모델 ~10MB 로드 피드백
-  const ok = await cam.request();
+  const ok = await cam.request({ numHands: (WORKS[current] && WORKS[current].camHands) || 2 });
   if (my !== camReqSeq) return; // 대기 중 뷰어 닫힘/전환 — cam.js가 자원 정리함
   camBtn.disabled = false;
   if (ok) {
@@ -249,12 +249,13 @@ async function openWork(idx) {
 }
 
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); // 탭 복귀 시 폭주 방지 캡
+  const real = (now - lastT) / 1000;
+  const dt = Math.min(0.05, real);          // 탭 복귀 시 폭주 방지 캡(기존 작품 규약)
   lastT = now;
   snapshotPointer(dt);
   updateHandCursor(synthesizeHand(dt));   // 손이 보이면 이 프레임의 포인터는 손
   try {
-    piece.tick(dt, pointer);
+    piece.tick(dt, pointer, Math.min(0.25, real)); // 3번째: 실제 경과(초) — fps 독립 진행이 필요한 작품용
   } catch (err) {
     console.error("작품 tick 예외 — 아트리움으로 복귀", err);
     closeWork(); // rAF 루프가 소리 없이 죽지 않도록 우아하게 복귀

@@ -13,6 +13,8 @@ let cam = null;                          // opts.cam getter 묶음(없으면 마
 let handS = null, pinchS = null;         // 순수 로직 상태
 let cursor = null;                       // 손 위치 {x,y}(캔버스 px) 또는 null
 let flash = 0;                           // 핀치 링 잔여 시간(초)
+let sim = 0;                             // 이번 프레임의 시뮬레이션 진행(초, 실제 경과 기준)
+let vig = null, halo = null; // 오프스크린 스프라이트(비네트·진주 헤일로)
 
 // 진주의 이미지 내 정규화 좌표 — contain-fit 박스 기준.
 // 원작 03-pearl-earring.jpg 픽셀 측정값(귀걸이 하이라이트 중심).
@@ -71,6 +73,43 @@ export function pinchStep(s, ratio, dt) {
   return { fire: false };
 }
 
+// ---- fps 독립화·렌더 경량화 순수 수식 (node:test 대상) ----------------
+// 셸의 dt는 0.05s로 캡되어 저fps에서 슬로모션이 된다. 실제 경과(realDt)로 진행하되
+// 서브스텝으로 스프링 안정성을 지키고, 프레임당 임펄스·잔상은 dt에 맞춰 보정한다.
+export const SIM_MAX = 0.25;    // 탭 복귀 폭주 방지 상한(초)
+export const SUBSTEP = 0.02;    // 물리 서브스텝 최대(초) — spring 4.2·damping 3.4 안정 영역
+export const HOT_BRIGHT = 1.15; // 이 밝기 초과는 흰색 혼합(백열) 문자열 사용
+export const RECT_MAX = 2.0;    // 이 크기(px) 이하 입자는 arc 대신 fillRect
+
+export function simDt(realDt, dt) {
+  if (!Number.isFinite(realDt)) return dt;
+  return Math.min(SIM_MAX, Math.max(0, realDt));
+}
+
+export function substeps(sim, maxStep = SUBSTEP) {
+  if (!(sim > 0)) return [];
+  const n = Math.ceil(sim / maxStep - 1e-9);
+  return Array.from({ length: n }, () => sim / n);
+}
+
+// 프레임당 임펄스(scatter)를 60fps 기준으로 정규화: 10fps면 6배(상한), 120fps면 0.5배(하한)
+export function impulseScale(sim) {
+  return Math.min(6, Math.max(0.5, sim * 60));
+}
+
+// 잔상 알파: 60fps에서 0.34였던 페이드를 같은 벽시계 속도로 유지
+export function trailAlpha(sim) {
+  return 1 - Math.pow(1 - 0.34, sim * 60);
+}
+
+// lighter 합성에서 rgb×alpha가 더해지므로, 현행 "rgb×bright 채널 스케일 × 알파(0.28+0.5·bright)"와
+// 같은 기여량을 alpha 하나로 표현한다. bright>1 구간은 1로 포화(흰색 혼합 문자열이 백열을 근사).
+export function particleAlpha(bright) {
+  return Math.min(1, bright * Math.min(1, 0.28 + 0.5 * bright));
+}
+
+export function isHot(bright) { return bright > HOT_BRIGHT; }
+
 export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height;
@@ -94,18 +133,21 @@ export default {
     cursor = null; flash = 0;
 
     tagPearls();
+    buildColorCache(); vig = buildVignette(); halo = buildHalo();
   },
 
-  tick(dt, ptr) {
-    T += dt;
+  tick(dt, ptr, realDt) {
+    sim = simDt(realDt, dt);            // 실제 경과로 진행 — 저fps에서도 슬로모션 없음
+    T += sim;
+    const imp = impulseScale(sim);      // 프레임당 임펄스를 60fps 기준으로 정규화
 
     // 1) 입력 반영 --------------------------------------------------
     if (ptr && ptr.inside) {
       // 드래그: 촛불 바람 — 약한 scatter + 위쪽 부력
       if (ptr.down && (Math.abs(ptr.dx) > 0.01 || Math.abs(ptr.dy) > 0.01)) {
         const s = reduced ? 22 : 60;
-        field.scatter(ptr.x, ptr.y, 90, s);
-        applyBuoyancy(ptr.x, ptr.y, 120, reduced ? 30 : 80, dt);
+        field.scatter(ptr.x, ptr.y, 90, s * imp);
+        applyBuoyancy(ptr.x, ptr.y, 120, reduced ? 30 : 80, sim);
       }
       // 클릭: 촛불 깜빡임 웨이브 시작
       if (ptr.justDown) {
@@ -117,17 +159,17 @@ export default {
     // 손(카메라): 손 속도 = 촛불 바람, 핀치 = 깜빡임 파동 — 마우스와 병행
     if (cam && cam.active()) {
       const h = cam.hands();
-      const wind = handWind(handS, h.n ? h.x : null, h.n ? h.y : null, dt);
+      const wind = handWind(handS, h.n ? h.x : null, h.n ? h.y : null, sim);
       if (wind) {
         const px = wind.x * W, py = wind.y * H;
         const g = 0.35 + 0.65 * wind.k;                     // 살랑(0.35)~세찬(1)
-        field.scatter(px, py, 110, (reduced ? 22 : 60) * g); // 손은 커서보다 넓게
-        applyBuoyancy(px, py, 140, (reduced ? 30 : 80) * g, dt);
+        field.scatter(px, py, 110, (reduced ? 22 : 60) * g * imp); // 손은 커서보다 넓게
+        applyBuoyancy(px, py, 140, (reduced ? 30 : 80) * g, sim);
       }
       const lm = cam.landmarks();
       // cam.js가 21점 미만 손을 필터링하므로 lm[0]은 항상 21점 — pinchRatio는 0·4·8·9를 인덱싱
       const ratio = lm.length ? pinchRatio(lm[0]) : null;
-      if (pinchStep(pinchS, ratio, dt).fire) {
+      if (pinchStep(pinchS, ratio, sim).fire) {
         flicker = FLICKER_DUR; flickerAge = 0;
         waveOrigin.x = handS.x * W; waveOrigin.y = handS.y * H;
         flash = 0.25;
@@ -135,15 +177,15 @@ export default {
       cursor = h.n ? { x: handS.x * W, y: handS.y * H } : null;
     } else {
       // 카메라 꺼짐: 손 없음으로 흘려 seen·closed를 풀고 쿨다운은 계속 감소 — 재활성 시 점프 속도 방지
-      handWind(handS, null, null, dt);
-      pinchStep(pinchS, null, dt);
+      handWind(handS, null, null, sim);
+      pinchStep(pinchS, null, sim);
       cursor = null;
     }
-    if (flash > 0) flash -= dt;
-    if (flicker > 0) { flicker -= dt; flickerAge += dt; }
+    if (flash > 0) flash -= sim;
+    if (flicker > 0) { flicker -= sim; flickerAge += sim; }
 
-    // 2) 시뮬레이션 -------------------------------------------------
-    field.step(dt);
+    // 2) 시뮬레이션 — 20ms 서브스텝으로 스프링 안정성 유지 -------------
+    for (const h of substeps(sim)) field.step(h);
 
     // 3) 렌더 -------------------------------------------------------
     drawBackground();
@@ -154,11 +196,12 @@ export default {
 
   resize(w, h) {
     W = w; H = h;
-    if (field) { field.resize(w, h); tagPearls(); }
+    if (field) { field.resize(w, h); tagPearls(); buildColorCache(); vig = buildVignette(); }
   },
 
   dispose() {
     ctx = null; field = null; pearls = []; cam = null; cursor = null;
+    vig = null; halo = null;
   },
 };
 
@@ -258,19 +301,11 @@ function applyBuoyancy(cx, cy, radius, strength, dt) {
 
 // --- 배경: 거의 검정 + 미세 비네트 --------------------------------
 function drawBackground() {
-  // 잔상 트레일: 빛 먼지의 여운을 남긴다
-  ctx.fillStyle = "rgba(5,5,7,0.34)";
+  // 잔상 트레일: 빛 먼지의 여운 — 60fps에서 0.34였던 페이드를 실제 경과에 맞춰 보정
+  ctx.fillStyle = "rgba(5,5,7," + trailAlpha(sim).toFixed(3) + ")";
   ctx.fillRect(0, 0, W, H);
-
-  // 미세 비네트(가장자리를 더 어둡게)
-  const g = ctx.createRadialGradient(
-    W * 0.46, H * 0.46, Math.min(W, H) * 0.1,
-    W * 0.5, H * 0.5, Math.max(W, H) * 0.72
-  );
-  g.addColorStop(0, "rgba(0,0,0,0)");
-  g.addColorStop(1, "rgba(0,0,0,0.55)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
+  // 미세 비네트: 1회 렌더한 스프라이트를 덮는다(매 프레임 그라디언트 생성·채움 제거)
+  if (vig) ctx.drawImage(vig, 0, 0, W, H);
 }
 
 // --- 입자 렌더 -----------------------------------------------------
@@ -307,13 +342,11 @@ function drawParticles() {
     // 크기: 밝을수록 크게(빛 먼지)
     const sz = (p.size || 1) * (0.6 + lum * 1.7);
 
-    const a = Math.min(1, 0.28 + bright * 0.5);
-    ctx.fillStyle = "rgba(" +
-      clamp255(p.r * bright) + "," +
-      clamp255(p.g * bright) + "," +
-      clamp255(p.b * bright) + "," + a.toFixed(3) + ")";
+    // 밝기는 globalAlpha로(lighter 합성에서 rgb×alpha가 더해짐), 백열 구간은 흰색 혼합색
+    ctx.globalAlpha = particleAlpha(bright);
+    ctx.fillStyle = isHot(bright) ? p.cssHot : p.css;
 
-    if (sz <= 1.2) {
+    if (sz <= RECT_MAX) {
       ctx.fillRect(p.x - sz * 0.5, p.y - sz * 0.5, sz, sz);
     } else {
       ctx.beginPath();
@@ -321,6 +354,7 @@ function drawParticles() {
       ctx.fill();
     }
   }
+  ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
 }
 
@@ -342,16 +376,12 @@ function drawPearls() {
     const pulse = 0.85 + 0.15 * Math.sin(T * 3 + pearls[k]);
     const gr = (p.size || 1) * (2.6 + glow * 6.5) * pulse;
 
-    // 2겹 원: 바깥 halo + 안쪽 코어
-    const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, gr);
-    const ha = (0.12 + glow * 0.6);
-    halo.addColorStop(0, "rgba(255,252,240," + ha.toFixed(3) + ")");
-    halo.addColorStop(0.5, "rgba(230,225,205," + (ha * 0.4).toFixed(3) + ")");
-    halo.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, gr, 0, Math.PI * 2);
-    ctx.fill();
+    // 2겹: 바깥 halo(스프라이트) + 안쪽 코어
+    if (halo) {
+      ctx.globalAlpha = 0.12 + glow * 0.6;
+      ctx.drawImage(halo, p.x - gr, p.y - gr, gr * 2, gr * 2);
+      ctx.globalAlpha = 1;
+    }
 
     // 코어 하이라이트
     const ca = 0.5 + glow * 0.5;
@@ -383,7 +413,48 @@ function drawHandCursor() {
   ctx.restore();
 }
 
-function clamp255(v) {
-  v = v | 0;
-  return v < 0 ? 0 : v > 255 ? 255 : v;
+// --- 오프스크린 스프라이트·색 캐시 (init/resize 시 1회) ---------------
+// 입자 색 문자열을 매 프레임 만들지 않는다: 기본색과 백열(흰색 55% 혼합)색을 캐시.
+function buildColorCache() {
+  const ps = field.particles;
+  for (let i = 0; i < ps.length; i++) {
+    const p = ps[i];
+    if (p.css) continue;                              // resize 후 재호출 시 멱등
+    const r = p.r | 0, g = p.g | 0, b = p.b | 0;
+    p.css = "rgb(" + r + "," + g + "," + b + ")";
+    const mix = (c) => (c + (255 - c) * 0.55) | 0;   // 백열: 흰색 쪽으로 55%
+    p.cssHot = "rgb(" + mix(r) + "," + mix(g) + "," + mix(b) + ")";
+  }
+}
+
+// 비네트: 매 프레임 라디얼 그라디언트 전체 화면 채움 대신 1회 렌더 후 drawImage
+function buildVignette() {
+  if (typeof document === "undefined") return null;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, W | 0); c.height = Math.max(1, H | 0);
+  const g2 = c.getContext("2d");
+  const g = g2.createRadialGradient(
+    W * 0.46, H * 0.46, Math.min(W, H) * 0.1,
+    W * 0.5, H * 0.5, Math.max(W, H) * 0.72
+  );
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.55)");
+  g2.fillStyle = g;
+  g2.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+
+// 진주 헤일로: 따뜻한 흰색 글로우 스프라이트 64×64 (중심 1 → 0.5에서 0.4 → 가장자리 0)
+function buildHalo() {
+  if (typeof document === "undefined") return null;
+  const S = 64, c = document.createElement("canvas");
+  c.width = S; c.height = S;
+  const g2 = c.getContext("2d");
+  const g = g2.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, "rgba(255,252,240,1)");
+  g.addColorStop(0.5, "rgba(230,225,205,0.4)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  g2.fillStyle = g;
+  g2.fillRect(0, 0, S, S);
+  return c;
 }

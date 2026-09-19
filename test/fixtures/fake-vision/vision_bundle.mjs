@@ -2,11 +2,12 @@
 // cam.js가 window.__CAM_CDN__ 시임으로 이 번들을 로드하면, 테스트가
 // window.__FAKE_HANDS__ = { n, x, y, pinch? } (x,y는 화면 기준 0..1)로 손을 연출한다.
 // pinch가 없으면(undefined) 활짝 벌린 손으로 취급(기존 {n,x,y} 호환).
+// 워커에서는 cam.js가 frame 메시지의 fake로 globalThis에 주입(메인 폴백에서는 globalThis===window).
 export const FilesetResolver = { forVisionTasks: async () => ({}) };
 export class HandLandmarker {
   static async createFromOptions() { return new HandLandmarker(); }
   detectForVideo() {
-    const s = (typeof window !== "undefined" && window.__FAKE_HANDS__) || { n: 0, x: 0.5, y: 0.5 };
+    const s = (typeof globalThis !== "undefined" && globalThis.__FAKE_HANDS__) || { n: 0, x: 0.5, y: 0.5 };
     // 손 형태 근사(원본=미반전 좌표 — cam.js가 1-x 반전하므로 화면 x를 역반전해 넣는다)
     const mk = (sx, y, pinch) => {
       const x = 1 - sx, size = 0.12, gap = pinch ? size * 0.1 : size * 0.8;
