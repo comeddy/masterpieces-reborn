@@ -249,12 +249,13 @@ async function openWork(idx) {
 }
 
 function frame(now) {
-  const dt = Math.min(0.05, (now - lastT) / 1000); // 탭 복귀 시 폭주 방지 캡
+  const real = (now - lastT) / 1000;
+  const dt = Math.min(0.05, real);          // 탭 복귀 시 폭주 방지 캡(기존 작품 규약)
   lastT = now;
   snapshotPointer(dt);
   updateHandCursor(synthesizeHand(dt));   // 손이 보이면 이 프레임의 포인터는 손
   try {
-    piece.tick(dt, pointer);
+    piece.tick(dt, pointer, Math.min(0.25, real)); // 3번째: 실제 경과(초) — fps 독립 진행이 필요한 작품용
   } catch (err) {
     console.error("작품 tick 예외 — 아트리움으로 복귀", err);
     closeWork(); // rAF 루프가 소리 없이 죽지 않도록 우아하게 복귀

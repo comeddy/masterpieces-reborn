@@ -13,6 +13,7 @@ let cam = null;                          // opts.cam getter 묶음(없으면 마
 let handS = null, pinchS = null;         // 순수 로직 상태
 let cursor = null;                       // 손 위치 {x,y}(캔버스 px) 또는 null
 let flash = 0;                           // 핀치 링 잔여 시간(초)
+let sim = 0;                             // 이번 프레임의 시뮬레이션 진행(초, 실제 경과 기준)
 
 // 진주의 이미지 내 정규화 좌표 — contain-fit 박스 기준.
 // 원작 03-pearl-earring.jpg 픽셀 측정값(귀걸이 하이라이트 중심).
@@ -133,16 +134,18 @@ export default {
     tagPearls();
   },
 
-  tick(dt, ptr) {
-    T += dt;
+  tick(dt, ptr, realDt) {
+    sim = simDt(realDt, dt);            // 실제 경과로 진행 — 저fps에서도 슬로모션 없음
+    T += sim;
+    const imp = impulseScale(sim);      // 프레임당 임펄스를 60fps 기준으로 정규화
 
     // 1) 입력 반영 --------------------------------------------------
     if (ptr && ptr.inside) {
       // 드래그: 촛불 바람 — 약한 scatter + 위쪽 부력
       if (ptr.down && (Math.abs(ptr.dx) > 0.01 || Math.abs(ptr.dy) > 0.01)) {
         const s = reduced ? 22 : 60;
-        field.scatter(ptr.x, ptr.y, 90, s);
-        applyBuoyancy(ptr.x, ptr.y, 120, reduced ? 30 : 80, dt);
+        field.scatter(ptr.x, ptr.y, 90, s * imp);
+        applyBuoyancy(ptr.x, ptr.y, 120, reduced ? 30 : 80, sim);
       }
       // 클릭: 촛불 깜빡임 웨이브 시작
       if (ptr.justDown) {
@@ -154,17 +157,17 @@ export default {
     // 손(카메라): 손 속도 = 촛불 바람, 핀치 = 깜빡임 파동 — 마우스와 병행
     if (cam && cam.active()) {
       const h = cam.hands();
-      const wind = handWind(handS, h.n ? h.x : null, h.n ? h.y : null, dt);
+      const wind = handWind(handS, h.n ? h.x : null, h.n ? h.y : null, sim);
       if (wind) {
         const px = wind.x * W, py = wind.y * H;
         const g = 0.35 + 0.65 * wind.k;                     // 살랑(0.35)~세찬(1)
-        field.scatter(px, py, 110, (reduced ? 22 : 60) * g); // 손은 커서보다 넓게
-        applyBuoyancy(px, py, 140, (reduced ? 30 : 80) * g, dt);
+        field.scatter(px, py, 110, (reduced ? 22 : 60) * g * imp); // 손은 커서보다 넓게
+        applyBuoyancy(px, py, 140, (reduced ? 30 : 80) * g, sim);
       }
       const lm = cam.landmarks();
       // cam.js가 21점 미만 손을 필터링하므로 lm[0]은 항상 21점 — pinchRatio는 0·4·8·9를 인덱싱
       const ratio = lm.length ? pinchRatio(lm[0]) : null;
-      if (pinchStep(pinchS, ratio, dt).fire) {
+      if (pinchStep(pinchS, ratio, sim).fire) {
         flicker = FLICKER_DUR; flickerAge = 0;
         waveOrigin.x = handS.x * W; waveOrigin.y = handS.y * H;
         flash = 0.25;
@@ -172,15 +175,15 @@ export default {
       cursor = h.n ? { x: handS.x * W, y: handS.y * H } : null;
     } else {
       // 카메라 꺼짐: 손 없음으로 흘려 seen·closed를 풀고 쿨다운은 계속 감소 — 재활성 시 점프 속도 방지
-      handWind(handS, null, null, dt);
-      pinchStep(pinchS, null, dt);
+      handWind(handS, null, null, sim);
+      pinchStep(pinchS, null, sim);
       cursor = null;
     }
-    if (flash > 0) flash -= dt;
-    if (flicker > 0) { flicker -= dt; flickerAge += dt; }
+    if (flash > 0) flash -= sim;
+    if (flicker > 0) { flicker -= sim; flickerAge += sim; }
 
-    // 2) 시뮬레이션 -------------------------------------------------
-    field.step(dt);
+    // 2) 시뮬레이션 — 20ms 서브스텝으로 스프링 안정성 유지 -------------
+    for (const h of substeps(sim)) field.step(h);
 
     // 3) 렌더 -------------------------------------------------------
     drawBackground();
@@ -295,8 +298,8 @@ function applyBuoyancy(cx, cy, radius, strength, dt) {
 
 // --- 배경: 거의 검정 + 미세 비네트 --------------------------------
 function drawBackground() {
-  // 잔상 트레일: 빛 먼지의 여운을 남긴다
-  ctx.fillStyle = "rgba(5,5,7,0.34)";
+  // 잔상 트레일: 빛 먼지의 여운 — 60fps에서 0.34였던 페이드를 실제 경과에 맞춰 보정
+  ctx.fillStyle = "rgba(5,5,7," + trailAlpha(sim).toFixed(3) + ")";
   ctx.fillRect(0, 0, W, H);
 
   // 미세 비네트(가장자리를 더 어둡게)
