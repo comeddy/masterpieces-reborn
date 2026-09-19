@@ -18,8 +18,9 @@ const run = (g, n, sec, dt = 1 / 60) => {
 
 test("한 손 유지: BUILD_INTERVAL마다 쌓기 발화", () => {
   const g = makeGesture();
-  const r = run(g, 1, 2); // 유예(0.25s) 이후 약 (2-0.25)/0.3 ≈ 5~6회
-  assert.ok(r.builds >= 4 && r.builds <= 7, `builds=${r.builds}`);
+  const r = run(g, 1, 2); // 유예 이후 약 (2 - N_GRACE)/BUILD_INTERVAL 회
+  const expected = Math.floor((2 - N_GRACE) / BUILD_INTERVAL);
+  assert.ok(Math.abs(r.builds - expected) <= 1, `builds=${r.builds}, expected≈${expected}`);
   assert.equal(r.collapses, 0);
 });
 
