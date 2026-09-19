@@ -13,10 +13,13 @@ const A_DEFAULT = 1280 / 883;          // 자산 종횡비(폴백 포함)
 // 화면이 원작보다 넓으면 상단(하늘)·하단(전경)이 잘리고, 세로가 남는다.
 const COVER_CU = 0.5, COVER_CV = 0.46;
 
-// 후지산: 원작(1280×883) 실측 위치의 작은 눈 덮인 봉우리. 실픽셀은 성겨서
-// 삼각형으로 뭉개지므로, 이 자리를 절차적 삼각형(정상=눈, 아래=남색 비탈)으로
-// 또렷이 세운다(uc=정상 u, v0=정상 v, v1=기슭 v, wApex/wBase=반너비).
-const FUJI = { uc: 0.497, v0: 0.693, v1: 0.763, wApex: 0.007, wBase: 0.033 };
+// 후지산: 원작(1280×883)에서 실측한 위치 — 큰 파도 오른쪽 검은 하늘 틈, 작은 파도 뒤.
+// 정상(눈) (0.640, 0.644), 기슭 v≈0.73(배·파도에 가려짐), 기슭 반너비 ≈0.06. 원작은 눈이
+// 산의 상단 약 70%를 덮고 아래에 남색 수목대가 띠처럼 놓인다. 실픽셀은 성겨서 삼각형으로
+// 뭉개지므로 이 자리를 절차적 삼각형으로 또렷이 세운다(uc=정상 u, v0=정상 v, v1=기슭 v,
+// wApex/wBase=반너비, snow=눈이 덮는 높이 비율). 좌표가 어긋나면 정지 입자가 움직이는
+// 바다 위에 박혀 '멈춘 점'으로 보이므로 자산이 바뀌면 반드시 재실측한다.
+const FUJI = { uc: 0.640, v0: 0.644, v1: 0.730, wApex: 0.006, wBase: 0.060, snow: 0.68 };
 
 // 진행파(traveling wave): 왼→오로 흐르는 바다의 일렁임.
 const WAVE_PERIOD = 5.5;               // 마루 하나가 지나가는 주기(초) — 느린 너울
@@ -60,26 +63,26 @@ function fujiPart(u, v) {
   const t = (v - FUJI.v0) / (FUJI.v1 - FUJI.v0);        // 0 정상 ~ 1 기슭
   const hw = FUJI.wApex + (FUJI.wBase - FUJI.wApex) * t;
   if (Math.abs(u - FUJI.uc) > hw) return 0;
-  return t < 0.3 ? 2 : 1;
+  return t < FUJI.snow ? 2 : 1;
 }
-// 봉우리 주변 완충대 — 여기의 잔점(물안개·배)을 걷어 후지산을 고립시킨다.
+// 봉우리 주변 완충대 — 하늘의 회색 물안개 잔점을 걷어 실루엣을 고립시킨다(배는 원작대로 둔다).
 function inFujiHalo(u, v) {
-  return u >= 0.40 && u <= 0.585 && v >= 0.635 && v <= 0.775;
+  return u >= 0.56 && u <= 0.72 && v >= 0.60 && v <= 0.745;
 }
 
 // 절차적 후지산 점: 자리의 성긴 실픽셀 대신 또렷한 눈 덮인 삼각봉을 만든다.
 function fujiPoints() {
   const pts = [];
-  const N = 380;
+  const N = 900;   // 기슭 반너비 0.06·높이 0.086 삼각형을 채우는 수 — 화면 캡 슬라이스 후에도 봉우리가 또렷하도록
   for (let i = 0; i < N; i++) {
     const t = Math.sqrt(Math.random());                 // 면적 가중(기슭이 넓다)
     const hw = FUJI.wApex + (FUJI.wBase - FUJI.wApex) * t;
     const u = FUJI.uc + (Math.random() * 2 - 1) * hw;
     const v = FUJI.v0 + t * (FUJI.v1 - FUJI.v0);
-    if (t < 0.3) {
-      pts.push({ u, v, r: 240, g: 243, b: 247 });        // 눈 덮인 정상(중성 흰=포말)
+    if (t < FUJI.snow) {
+      pts.push({ u, v, r: 240, g: 243, b: 247 });        // 눈 덮인 상부(중성 흰=포말)
     } else {
-      const d = 0.55 + 0.45 * ((t - 0.3) / 0.7);         // 아래로 짙어지는 남색 비탈
+      const d = 0.55 + 0.45 * ((t - FUJI.snow) / (1 - FUJI.snow));   // 아래로 짙어지는 남색 수목대
       pts.push({ u, v, r: (30 * d) | 0, g: (50 * d) | 0, b: (104 * d) | 0 });
     }
   }
@@ -90,10 +93,7 @@ function keepProb(u, v, r, g, b) {
   const cls = classOf(u, v, r, g, b);
   if (cls === "sky") return 0;
   if (fujiPart(u, v)) return 0;               // 실픽셀 제거 → 절차적 후지산으로 대체
-  if (inFujiHalo(u, v)) {                      // 봉우리 배경 정리 → 실루엣 고립
-    if (cls === "mist") return 0;
-    if (cls === "boat") return 0.08;
-  }
+  if (inFujiHalo(u, v) && cls === "mist") return 0;   // 봉우리 배경의 회색 잔점 정리 → 실루엣 고립
   if (cls === "mist" && u >= 0.6) return 0;    // 우측 열린 하늘엔 스프레이 금지
   return KEEP[cls];
 }
