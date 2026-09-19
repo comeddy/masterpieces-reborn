@@ -21,7 +21,7 @@ const MAX_TIERS = 40;                // 탑 높이 상한 — 초과 시 상부�
 // ---- 카메라 제스처 상태 기계 (순수, node:test 대상) ----
 // 한 손: BUILD_INTERVAL마다 쌓기 발화 / 두 손: COLLAPSE_HOLD 유지 시 붕괴 1회
 // 발화 후 COLLAPSE_COOL 쿨다운. 손 개수 변화는 N_GRACE 유예로 프레임 드랍 흡수.
-export const BUILD_INTERVAL = 0.3;
+export const BUILD_INTERVAL = 0.2;
 export const COLLAPSE_HOLD = 0.8;
 export const COLLAPSE_COOL = 3;
 export const N_GRACE = 0.25;
@@ -190,7 +190,7 @@ function update(dt, ptr) {
     if (ptr.downTime > 1.2 && !collapseDone) { collapseAt(ptr.y); collapseDone = true; }
   }
   if (ptr.justUp && !collapseDone && heldTime <= 1.2 && ptr.inside) {
-    const n = 3 + (Math.random() * 3 | 0);               // 3~5개
+    const n = 5 + (Math.random() * 4 | 0);               // 5~8개
     for (let k = 0; k < n; k++) placeNear(ptr.x + rand(-8, 8), ptr.y + rand(-6, 6));
   }
   // 카메라 제스처: 한 손=조준 지점에 쌓기 / 두 손=유지 시 그 위 붕괴 (클릭과 병행)
@@ -199,7 +199,7 @@ function update(dt, ptr) {
     handPt = { x: h.x * W, y: h.y * H, n: h.n };
     const act = gestureStep(gest, h.n, dt);
     if (act.build) {
-      const c = 3 + (Math.random() * 3 | 0);             // 클릭과 동일한 3~5개
+      const c = 4 + (Math.random() * 3 | 0);             // 발화당 4~6개
       for (let k = 0; k < c; k++) placeNear(handPt.x + rand(-8, 8), handPt.y + rand(-6, 6));
     }
     if (act.collapse) collapseAt(handPt.y);
@@ -210,7 +210,7 @@ function update(dt, ptr) {
   const engaged = (ptr.inside && ptr.down) || ptr.justDown || handPt.n >= 1;
   if (idleStep(idle, engaged, dt, () => rand(IDLE_MIN, IDLE_MAX))) resetTower();
   buildTimer += dt;                                      // 자동 건설(2~3s)
-  if (buildTimer >= buildInterval) { buildTimer = 0; buildInterval = rand(2, 3); placeNextAuto(); }
+  if (buildTimer >= buildInterval) { buildTimer = 0; buildInterval = rand(1, 1.5); placeNextAuto(); }
   // 높이 상한: 하늘에 닿을 듯하면 상부가 스스로 무너진다 — 끝없는 오만과 붕괴의 순환
   if (tiers.length > MAX_TIERS) collapseFrom(Math.floor(MAX_TIERS * 0.4));
   for (const b of blocks) {                              // 낙하 안착(살짝 튕김)
@@ -337,7 +337,7 @@ export default {
   init(opts) {
     ctx = opts.ctx; W = opts.width; H = opts.height; reduced = !!opts.reducedMotion; T = 0;
     tiers = []; blocks = []; debris = []; dust = [];
-    buildTimer = 0; buildInterval = rand(2, 3); heldTime = 0; collapseDone = false;
+    buildTimer = 0; buildInterval = rand(1, 1.5); heldTime = 0; collapseDone = false;
     camS = 1; camTarget = 1; cx = W * 0.5; groundY = H * 0.80;
     cam = opts.cam || null;
     gest = makeGesture();
