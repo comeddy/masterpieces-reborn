@@ -309,34 +309,6 @@ function drawHandCursor() {
   ctx.restore();
 }
 
-// --- 코너 카메라 미러: 우하단 좌우반전 프리뷰 + 손 랜드마크 오버레이 ---
-// (10번 계획 Task 5와 자구 동일 — 카메라 작품 4개+ 시 공용 헬퍼 리팩터 후보)
-function drawCamMirror() {
-  if (!cam || !cam.active()) return;
-  const v = cam.video();
-  if (!v || v.readyState < 2) return;
-  const mw = Math.min(200, W * 0.18);
-  const mh = mw * ((v.videoHeight / v.videoWidth) || 0.75);
-  const mx = W - mw - 12, my = H - mh - 12;
-  ctx.save();
-  ctx.translate(mx + mw, my); ctx.scale(-1, 1);          // 좌우반전 미러
-  ctx.globalAlpha = 0.92;
-  ctx.drawImage(v, 0, 0, mw, mh);
-  ctx.restore();
-  ctx.save();
-  ctx.fillStyle = "rgba(255,210,63,0.9)";                // 랜드마크 점
-  for (const hand of cam.landmarks()) {
-    for (const p of hand) {
-      ctx.beginPath();
-      ctx.arc(mx + (1 - p.x) * mw, my + p.y * mh, 1.5, 0, 6.283);
-      ctx.fill();
-    }
-  }
-  ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.lineWidth = 1;
-  ctx.strokeRect(mx, my, mw, mh);
-  ctx.restore();
-}
-
 function rebuild() { buildPortrait(Math.floor(Math.random() * 2 ** 31)); asm = 0; }
 
 export default {
@@ -413,7 +385,6 @@ export default {
     const fa = clamp((asm - 0.6) / 0.4, 0, 1);
     if (fa > 0.01) drawFeatures(fa);
     drawHandCursor();
-    drawCamMirror();
   },
 
   dispose() { ctx = null; head = null; facets = []; feat = null; cam = null; wav = null; },
