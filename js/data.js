@@ -11,8 +11,9 @@ export const WORKS = [
   {
     no: "01", wing: "wave", title: "After Hokusai — Great Wave", ko: "가나가와 해변의 높은 파도",
     medium: "Particle fluid · after Hokusai (c.1831, public domain)", year: "2026",
-    note: "호쿠사이의 파도가 수천 개의 물 입자로 다시 태어난다. 갈고리 같은 물보라는 주기적으로 스스로 부서져 포말로 흩어지고, 후지산은 그 너머에서 미동도 없다. 손으로 휘저으면 파도는 무너졌다가 — 다시 그 불멸의 형상으로 되돌아온다.",
-    hint: "드래그로 물을 휘저으세요 · 클릭으로 물보라 · 파도는 스스로도 부서집니다",
+    note: "호쿠사이의 파도가 수천 개의 물 입자로 다시 태어난다. 갈고리 같은 물보라는 주기적으로 스스로 부서져 포말로 흩어지고, 후지산은 그 너머에서 미동도 없다. 손으로 휘저으면 파도는 무너졌다가 — 다시 그 불멸의 형상으로 되돌아온다. 카메라 앞에서 펼친 손으로 물을 휘젓고, 주먹을 쥐었다 펼치면 물보라가 튄다.",
+    hint: "📷를 켜고 손을 펼쳐 물을 휘저으세요 · 주먹을 쥐었다 펼치면 물보라 · 마우스는 드래그로 휘젓고 클릭으로 물보라",
+    cam: true, handPointer: true,
     module: "./pieces/01-great-wave.js", asset: "assets/targets/01-great-wave.jpg",
   },
   {
@@ -25,8 +26,9 @@ export const WORKS = [
   {
     no: "03", wing: "wave", title: "After Vermeer — Girl with a Pearl Earring", ko: "진주 귀걸이를 한 소녀",
     medium: "Light-dust particles · after Vermeer (c.1665, public domain)", year: "2026",
-    note: "페르메이르의 소녀가 어둠 속 빛 먼지로 나타난다. 촛불 바람에 먼지가 흩날려도 소녀는 언제나 되돌아오는데 — 진주만은 늘 마지막에, 가장 밝게 돌아온다. 어둠이 깊을수록 빛나는 단 하나의 점.",
-    hint: "드래그로 빛 먼지를 흩으세요 · 클릭으로 촛불 깜빡임",
+    note: "페르메이르의 소녀가 어둠 속 빛 먼지로 나타난다. 촛불 바람에 먼지가 흩날려도 소녀는 언제나 되돌아오는데 — 진주만은 늘 마지막에, 가장 밝게 돌아온다. 어둠이 깊을수록 빛나는 단 하나의 점. 카메라 앞에서 손을 움직이면 그 손이 촛불이 되고, 손끝을 맞대면 불꽃이 흔들린다.",
+    hint: "📷를 켜고 손을 촛불처럼 움직여 빛 먼지를 흩으세요 · 손끝을 맞대면 촛불이 깜빡입니다 · 마우스로도 가능합니다",
+    cam: true,
     module: "./pieces/03-pearl-earring.js", asset: "assets/targets/03-pearl-earring.jpg",
   },
   {
@@ -79,15 +81,17 @@ export const WORKS = [
   {
     no: "10", wing: "dream", title: "After Bruegel — Tower of Babel", ko: "바벨탑",
     medium: "Endless construction · after Bruegel (1563, public domain)", year: "2026",
-    note: "브뤼헐의 바벨탑은 완성되지 못할 것을 알면서도 쌓아 올려진다. 벽돌은 저절로 한 장씩 놓이고, 당신은 클릭으로 건설을 거들 수도, 길게 눌러 무너뜨릴 수도 있다. 무너진 자리에서도 건설은 계속된다 — 인간의 끝없는 오만과 열망.",
-    hint: "클릭으로 벽돌을 쌓으세요 · 길게 누르면 무너집니다",
+    note: "브뤼헐의 바벨탑은 완성되지 못할 것을 알면서도 쌓아 올려진다. 벽돌은 저절로 한 장씩 놓이고, 당신은 클릭으로 건설을 거들 수도, 길게 눌러 무너뜨릴 수도 있다. 무너진 자리에서도 건설은 계속된다 — 인간의 끝없는 오만과 열망. 카메라 앞에 한 손을 들면 탑이 자라고, 두 손을 잠시 들고 있으면 무너진다.",
+    hint: "📷를 켜고 한 손을 들면 쌓고 두 손을 잠시 들면 무너집니다 · 마우스는 클릭으로 쌓고 길게 누르면 무너집니다",
+    cam: true,
     module: "./pieces/10-tower-of-babel.js",
   },
   {
     no: "11", wing: "dream", title: "After Klimt — The Tree of Life", ko: "생명의 나무",
-    medium: "Golden spiral growth · WebAudio · after Klimt (1905–09, public domain)", year: "2026",
-    note: "클림트의 생명의 나무가 금빛 나선을 뻗으며 자라난다. 가지는 하늘을 향해 감아 올라가 저마다의 소용돌이로 말리고, 클릭한 자리에서는 새 가지가 돋아 피어난다. 가지 사이에 클림트의 검은 새가 내려앉는 — 삶과 죽음과 재생이 한 그루에 감긴 나무.",
-    hint: "클릭한 곳에서 새 가지가 자랍니다 · 드래그로 바람 · 사운드를 켜면 가지가 필 때 울림",
+    medium: "Golden spiral growth · Hand tracking · WebAudio · after Klimt (1905–09, public domain)", year: "2026",
+    note: "클림트의 생명의 나무가 금빛 나선을 뻗으며 자라난다. 가지는 하늘을 향해 감아 올라가 저마다의 소용돌이로 말리고, 손을 내밀어 머무는 자리에서는 새 가지가 돋아 손을 향해 피어난다. 가지 사이에 클림트의 검은 새가 내려앉는 — 삶과 죽음과 재생이 한 그루에 감긴 나무.",
+    hint: "📷를 켜고 손을 들면 그곳으로 가지가 자랍니다 · 휘두르면 바람 · 커서로도 가능합니다",
+    cam: true,
     module: "./pieces/11-tree-of-life.js",
   },
   {

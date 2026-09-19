@@ -9,6 +9,10 @@ let pearls = [];          // 진주 위치 입자 인덱스 목록
 let flicker = 0;          // 촛불 깜빡임 남은 시간(초)
 let flickerAge = 0;       // 깜빡임 경과 시간(초) — 방사형 웨이브 전파용
 let waveOrigin = { x: 0, y: 0 };
+let cam = null;                          // opts.cam getter 묶음(없으면 마우스만)
+let handS = null, pinchS = null;         // 순수 로직 상태
+let cursor = null;                       // 손 위치 {x,y}(캔버스 px) 또는 null
+let flash = 0;                           // 핀치 링 잔여 시간(초)
 
 // 진주의 이미지 내 정규화 좌표 — contain-fit 박스 기준.
 // 원작 03-pearl-earring.jpg 픽셀 측정값(귀걸이 하이라이트 중심).
@@ -19,6 +23,53 @@ const FLICKER_DUR = 0.6;  // 클릭 깜빡임 지속(초)
 // 진주 입자의 절대 강성(전역 spring 4.2의 절반). 절대값으로 할당해
 // tagPearls()가 여러 번 호출돼도(예: resize 반복) 누적 반감되지 않도록 한다.
 const PEARL_SPRING = 2.1;
+
+// ---- 손 입력 순수 로직 (node:test 대상) ----------------------------
+// 손 속도가 촛불 바람이 된다. 좌표는 0..1 정규화(해상도 무관), 속도는 정규화 거리/초.
+export const WIND_MIN = 0.15;   // 이 속도 미만은 랜드마크 지터로 보고 무시
+export const WIND_FULL = 0.9;   // 이 속도 이상이면 마우스 드래그와 같은 세기(k=1)
+export const HAND_SMOOTH = 18;  // 위치 EMA 반응(1/s)
+
+export function makeHandState() { return { x: 0, y: 0, seen: false }; }
+
+// 반환: { x, y, k } (스무딩 위치·세기 0..1) 또는 null(손 없음·첫 등장·임계 미만)
+export function handWind(s, hx, hy, dt) {
+  if (!Number.isFinite(hx) || !Number.isFinite(hy)) { s.seen = false; return null; } // null·undefined·NaN 모두 손 없음
+  if (!s.seen) { s.x = hx; s.y = hy; s.seen = true; return null; } // 점프 속도 방지
+  const px = s.x, py = s.y;
+  const a = Math.min(1, HAND_SMOOTH * dt);
+  s.x += (hx - s.x) * a;
+  s.y += (hy - s.y) * a;
+  const speed = Math.hypot(s.x - px, s.y - py) / Math.max(dt, 1e-6);
+  const k = Math.min(1, Math.max(0, (speed - WIND_MIN) / (WIND_FULL - WIND_MIN)));
+  return k > 0 ? { x: s.x, y: s.y, k } : null;
+}
+
+// 핀치(엄지 끝 4·검지 끝 8 맞대기) = 손가락 튕기기 → 촛불 깜빡임 파동
+export const PINCH_IN = 0.30;   // 이 비율 미만이면 닫힘 진입
+export const PINCH_OUT = 0.45;  // 이 비율 초과면 해제 (사이 구간은 상태 유지)
+export const PINCH_COOL = 0.4;  // 발화 후 재발화 금지(초)
+
+// 엄지 끝-검지 끝 거리를 손 크기(손목 0 ↔ 중지 MCP 9)로 나눈 비율. 크기 0이면 열림(1).
+export function pinchRatio(lm) {
+  const size = Math.hypot(lm[0].x - lm[9].x, lm[0].y - lm[9].y);
+  if (size <= 1e-9) return 1;
+  return Math.hypot(lm[4].x - lm[8].x, lm[4].y - lm[8].y) / size;
+}
+
+export function makePinchState() { return { closed: false, cool: 0 }; }
+
+export function pinchStep(s, ratio, dt) {
+  s.cool = Math.max(0, s.cool - dt);
+  if (ratio === null || ratio === undefined) { s.closed = false; return { fire: false }; }
+  if (!s.closed && ratio < PINCH_IN) {
+    s.closed = true;
+    if (s.cool <= 0) { s.cool = PINCH_COOL; return { fire: true }; }
+    return { fire: false };
+  }
+  if (s.closed && ratio > PINCH_OUT) s.closed = false;
+  return { fire: false };
+}
 
 export default {
   init(opts) {
@@ -37,6 +88,10 @@ export default {
       damping: 3.4,
       jitter: 4,
     });
+
+    cam = opts.cam || null;
+    handS = makeHandState(); pinchS = makePinchState();
+    cursor = null; flash = 0;
 
     tagPearls();
   },
@@ -59,6 +114,32 @@ export default {
         waveOrigin.x = ptr.x; waveOrigin.y = ptr.y;
       }
     }
+    // 손(카메라): 손 속도 = 촛불 바람, 핀치 = 깜빡임 파동 — 마우스와 병행
+    if (cam && cam.active()) {
+      const h = cam.hands();
+      const wind = handWind(handS, h.n ? h.x : null, h.n ? h.y : null, dt);
+      if (wind) {
+        const px = wind.x * W, py = wind.y * H;
+        const g = 0.35 + 0.65 * wind.k;                     // 살랑(0.35)~세찬(1)
+        field.scatter(px, py, 110, (reduced ? 22 : 60) * g); // 손은 커서보다 넓게
+        applyBuoyancy(px, py, 140, (reduced ? 30 : 80) * g, dt);
+      }
+      const lm = cam.landmarks();
+      // cam.js가 21점 미만 손을 필터링하므로 lm[0]은 항상 21점 — pinchRatio는 0·4·8·9를 인덱싱
+      const ratio = lm.length ? pinchRatio(lm[0]) : null;
+      if (pinchStep(pinchS, ratio, dt).fire) {
+        flicker = FLICKER_DUR; flickerAge = 0;
+        waveOrigin.x = handS.x * W; waveOrigin.y = handS.y * H;
+        flash = 0.25;
+      }
+      cursor = h.n ? { x: handS.x * W, y: handS.y * H } : null;
+    } else {
+      // 카메라 꺼짐: 손 없음으로 흘려 seen·closed를 풀고 쿨다운은 계속 감소 — 재활성 시 점프 속도 방지
+      handWind(handS, null, null, dt);
+      pinchStep(pinchS, null, dt);
+      cursor = null;
+    }
+    if (flash > 0) flash -= dt;
     if (flicker > 0) { flicker -= dt; flickerAge += dt; }
 
     // 2) 시뮬레이션 -------------------------------------------------
@@ -68,6 +149,7 @@ export default {
     drawBackground();
     drawParticles();
     drawPearls();
+    drawHandCursor();
   },
 
   resize(w, h) {
@@ -76,7 +158,7 @@ export default {
   },
 
   dispose() {
-    ctx = null; field = null; pearls = [];
+    ctx = null; field = null; pearls = []; cam = null; cursor = null;
   },
 };
 
@@ -279,6 +361,26 @@ function drawPearls() {
     ctx.fill();
   }
   ctx.globalCompositeOperation = "source-over";
+}
+
+// --- 손 커서: 촛불색 글로우 점 + 핀치 순간 확대 링 ------------------
+function drawHandCursor() {
+  if (!cursor) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  const r = 12;
+  const g = ctx.createRadialGradient(cursor.x, cursor.y, 0, cursor.x, cursor.y, r * 2);
+  g.addColorStop(0, "rgba(255,200,120,0.85)");
+  g.addColorStop(1, "rgba(255,200,120,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cursor.x, cursor.y, r * 2, 0, Math.PI * 2); ctx.fill();
+  if (flash > 0) {                                  // 핀치: 커지며 옅어지는 링
+    const t = 1 - flash / 0.25;
+    ctx.strokeStyle = "rgba(255,220,160," + (0.8 * (1 - t)).toFixed(3) + ")";
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cursor.x, cursor.y, r + t * 40, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function clamp255(v) {

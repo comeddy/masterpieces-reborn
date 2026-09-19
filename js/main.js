@@ -2,6 +2,7 @@
 import { WINGS, WORKS, wingOf } from "./data.js";
 import * as mic from "./mic.js";
 import * as cam from "./cam.js";
+import { sampleFromLandmarks, makePointerState, applyHand, detectMirrored } from "./hand-pointer.js";
 
 const $ = (sel) => document.querySelector(sel);
 const body = document.body;
@@ -43,7 +44,7 @@ micBtn.addEventListener("click", async () => {
 
 // ---------- 카메라 (cam: true 작품에서만 버튼 노출) ----------
 const camBtn = $("#v-cam");
-const CAM_LABEL = "📷 손으로 조종하기";
+const CAM_LABEL = "📷 카메라로 체험하기";
 function resetCamBtn() {
   camBtn.setAttribute("aria-pressed", "false");
   camBtn.disabled = false;
@@ -62,8 +63,8 @@ camBtn.addEventListener("click", async () => {
     camBtn.setAttribute("aria-pressed", "true");
     camBtn.textContent = "📷 손을 비춰보세요";
   } else {
-    camBtn.disabled = true; // 권한 거부/미지원/CDN 실패: 클릭 폴백 안내
-    camBtn.textContent = "카메라를 사용할 수 없어요 — 클릭으로 체험하세요";
+    camBtn.disabled = true; // 권한 거부/미지원/CDN 실패: 마우스 폴백 안내
+    camBtn.textContent = "카메라를 사용할 수 없어요 — 마우스로 체험하세요";
   }
 });
 
@@ -113,7 +114,8 @@ $(".brand").addEventListener("click", closeWork);
 // 이벤트는 원시 상태만 기록, 프레임마다 스냅샷을 tick에 전달
 const raw = { x: -1e4, y: -1e4, down: false, inside: false, pendingDown: false, pendingUp: false };
 const pointer = { x: -1e4, y: -1e4, px: -1e4, py: -1e4, dx: 0, dy: 0,
-                  down: false, justDown: false, justUp: false, downTime: 0, inside: false };
+                  down: false, justDown: false, justUp: false, downTime: 0, inside: false,
+                  hand: { visible: false, openness: 0, speed: 0 } };   // 손 합성 부가 정보(작품 선택 소비)
 canvas.addEventListener("pointermove", (e) => { raw.x = e.clientX; raw.y = e.clientY; raw.inside = true; });
 canvas.addEventListener("pointerdown", (e) => {
   raw.x = e.clientX; raw.y = e.clientY; raw.down = true; raw.pendingDown = true;
@@ -132,6 +134,48 @@ function snapshotPointer(dt) {
   pointer.down = raw.down;
   pointer.inside = raw.inside;
   pointer.downTime = pointer.down ? pointer.downTime + dt : 0;
+}
+
+// ---------- 손 → 포인터 합성 (handPointer: true 작품) ----------
+// cam.js 계약: hands().x·landmarks()는 모두 거울 보정 후 좌표(세션 중 불변)다. detectMirrored
+// (순수 모듈)는 미확정 동안 이 계약값(보정 후)을 기본으로 반환하고, 손이 중앙에서 벗어난 첫
+// 프레임에 hands().x와 손바닥 중심을 비교해 한 번 판별해 래치한다 — cam.js가 계약을 어기고
+// 원본 좌표를 내주는 회귀가 생겨도 손이 반대로 움직이지 않도록 잡아내는 안전망이다.
+const handCursor = $("#hand-cursor");
+let handState = makePointerState();
+let handWarned = false;   // 합성 상태·경고 플래그는 카메라가 꺼지면 초기화 — 재활성화마다 새로 시작
+let stageW = 0, stageH = 0;   // sizeCanvas()의 CSS px — 합성 좌표 범위
+
+function synthesizeHand(dt) {
+  const work = WORKS[current];
+  if (!(work && work.handPointer && cam.active())) {
+    if (handState.seen || handState.mirrored !== null) {    // 유령 손 방지: 이전 활성화의 잔여 상태 제거
+      handState = makePointerState(); handWarned = false;
+    }
+    pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
+    return false;
+  }
+  // 검출 예외는 그 프레임만 건너뛰고 마우스 폴백 — rAF 루프를 죽이지 않는다.
+  try {
+    const h = cam.hands();                                  // 이 프레임의 추론 트리거(1회 캐시는 cam.js 보장)
+    const lm = cam.landmarks();
+    const primary = lm && lm[0];
+    const sample = sampleFromLandmarks(primary, detectMirrored(handState, h && h.x, primary));
+    return applyHand(pointer, sample, handState, dt, stageW, stageH);
+  } catch (err) {
+    handState = makePointerState();                         // 예외 직후엔 다음 활성화처럼 새로 시작
+    pointer.hand.visible = false; pointer.hand.openness = 0; pointer.hand.speed = 0;
+    if (!handWarned) { handWarned = true; console.warn("손 인식 예외 — 이 프레임은 마우스로 폴백", err); }
+    return false;
+  }
+}
+
+function updateHandCursor(owns) {
+  handCursor.hidden = !owns;
+  if (!owns) return;
+  handCursor.style.transform = `translate(${pointer.x}px, ${pointer.y}px) translate(-50%, -50%)`;
+  handCursor.style.setProperty("--hand-open", pointer.hand.openness.toFixed(2));
+  handCursor.classList.toggle("is-down", pointer.down);
 }
 
 // ---------- 뷰어 ----------
@@ -181,7 +225,7 @@ async function openWork(idx) {
   camBtn.hidden = !work.cam;
   $("#v-error").hidden = true;
 
-  const { w, h } = sizeCanvas();
+  const { w, h } = sizeCanvas(); stageW = w; stageH = h;
   try {
     const [mod, target] = await Promise.all([import(work.module), loadImage(work.asset)]);
     if (current !== idx) return; // 로딩 중 다른 작품으로 이동함
@@ -191,7 +235,8 @@ async function openWork(idx) {
                  audio: { enabled: () => soundOn,
                           mic: { active: () => mic.active(), level: () => mic.level() } },
                  cam: { active: () => cam.active(), hands: () => cam.hands(),
-                        video: () => cam.video(), landmarks: () => cam.landmarks() } });
+                        video: () => cam.video(), landmarks: () => cam.landmarks(),
+                        drawMirror: (c, rect) => cam.drawMirror(c, rect) } });
     lastT = performance.now();
     pointer.downTime = 0;
     rafId = requestAnimationFrame(frame);
@@ -207,6 +252,7 @@ function frame(now) {
   const dt = Math.min(0.05, (now - lastT) / 1000); // 탭 복귀 시 폭주 방지 캡
   lastT = now;
   snapshotPointer(dt);
+  updateHandCursor(synthesizeHand(dt));   // 손이 보이면 이 프레임의 포인터는 손
   try {
     piece.tick(dt, pointer);
   } catch (err) {
@@ -225,6 +271,7 @@ async function closeWork() {
   micReqSeq++; // 대기 중인 마이크 권한 요청의 늦은 완료를 무효화
   mic.stop(); resetMicBtn(); micBtn.hidden = true;
   camReqSeq++; cam.stop(); resetCamBtn(); camBtn.hidden = true;
+  handState = makePointerState(); handCursor.hidden = true; handWarned = false;   // 합성 상태·링 커서 초기화
   current = -1;
   body.dataset.view = "atrium";
   $("#viewer").setAttribute("aria-hidden", "true");
@@ -254,6 +301,6 @@ addEventListener("keydown", (e) => {
 });
 addEventListener("resize", () => {
   if (body.dataset.view !== "viewer" || !piece) return;
-  const { w, h } = sizeCanvas();
+  const { w, h } = sizeCanvas(); stageW = w; stageH = h;
   piece.resize(w, h);
 });
