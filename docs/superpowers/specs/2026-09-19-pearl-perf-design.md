@@ -64,10 +64,12 @@
 - 메시지 프로토콜(메인 → 워커):
   - `{ type: "init", base, model, numHands, seam }` — `await import(base + "/vision_bundle.mjs")`,
     `FilesetResolver.forVisionTasks(base + "/wasm")`, `HandLandmarker.createFromOptions`
-    (VIDEO 모드, `numHands`). **델리게이트 자동 선택**: GPU로 생성 → 빈 640×480
-    `OffscreenCanvas` 프레임으로 워밍업 1회 + 6회 벤치 → p50 > 40ms 이거나
-    `WEBGL_debug_renderer_info`의 renderer가 `/SwiftShader|llvmpipe|Software|Basic Render/i`에
-    맞으면 `close()` 후 CPU로 재생성. GPU 생성 예외도 CPU 폴백.
+    (VIDEO 모드, `numHands`). **델리게이트 자동 선택**: renderer(`WEBGL_debug_renderer_info`)가
+    `/SwiftShader|llvmpipe|Software|Basic Render/i`에 맞으면 GPU 시도를 건너뛰고 바로 CPU
+    (구현 중 확인: 소프트웨어 GL에서 GPU 생성+벤치가 15초 이상 걸려 대기 시간을 초과함).
+    아니면 GPU로 생성 → 빈 640×480 `OffscreenCanvas` 프레임으로 워밍업 1회 + 6회 벤치 →
+    p50 > 40ms면 `close()` 후 CPU로 재생성. GPU 생성 예외도 CPU 폴백. 단계마다
+    `{ type: "progress", stage }` 하트비트(import·fileset·create·bench) 전송.
     응답 `{ type: "ready", delegate, p50, renderer }` 또는 `{ type: "fail", msg }`.
   - `{ type: "frame", frame, ts, fake? }` (frame은 transfer) — `ts = max(prevTs + 1, ts)`
     단조 가드 → `detectForVideo(frame, ts)` → `frame.close()` → 응답
@@ -80,9 +82,13 @@
 ### (A) js/cam.js — 워커 소유 + 메인 스레드 폴백
 
 - `request({ numHands = 2 } = {})`: getUserMedia → `new Worker(new URL("./cam-worker.js", import.meta.url))`
-  (클래식) → `init` 전송 → `ready`/`fail` 대기(타임아웃 20초) → 실패 시 **기존
+  (클래식) → `init` 전송 → `ready`/`fail` 대기 — 고정 타임아웃이 아니라 **마지막 메시지
+  (progress 포함) 이후 25초 무응답**(`READY_IDLE_MS`)일 때 실패 → 실패 시 **기존
   메인 스레드 경로로 폴백**(현행 코드 유지: 동적 import + 동기 detect). 세대 가드는
-  `await` 경계마다 유지, 늦은 완료 시 워커 `terminate()`·트랙 정지.
+  `await` 경계마다 유지. 대기 중 워커는 모듈 슬롯(`pendingWorker`/`pendingAbort`)에
+  두어 `stop()`이 즉시 종료할 수 있다. 준비 후 워커가 죽으면(`onerror` 또는 연속 3회
+  `fail`) 같은 파라미터로 **1회 재시작**, 실패하면 `stop()`으로 비활성화하고 "카메라
+  버튼을 다시 눌러 주세요" 경고 1회.
 - 상태: `mode: "worker" | "main" | null`, `worker`, `inFlight: boolean`,
   `inFlightSince`, `stats = { delegate, p50, renderer, mode }`.
 - `detect()`(워커 모드): `!active() || vid.readyState < 2` → return. `vid.currentTime === lastVT`
