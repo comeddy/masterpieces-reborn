@@ -14,6 +14,7 @@ let handS = null, pinchS = null;         // 순수 로직 상태
 let cursor = null;                       // 손 위치 {x,y}(캔버스 px) 또는 null
 let flash = 0;                           // 핀치 링 잔여 시간(초)
 let sim = 0;                             // 이번 프레임의 시뮬레이션 진행(초, 실제 경과 기준)
+let vig = null, halo = null; // 오프스크린 스프라이트(비네트·진주 헤일로)
 
 // 진주의 이미지 내 정규화 좌표 — contain-fit 박스 기준.
 // 원작 03-pearl-earring.jpg 픽셀 측정값(귀걸이 하이라이트 중심).
@@ -132,6 +133,7 @@ export default {
     cursor = null; flash = 0;
 
     tagPearls();
+    buildColorCache(); vig = buildVignette(); halo = buildHalo();
   },
 
   tick(dt, ptr, realDt) {
@@ -194,11 +196,12 @@ export default {
 
   resize(w, h) {
     W = w; H = h;
-    if (field) { field.resize(w, h); tagPearls(); }
+    if (field) { field.resize(w, h); tagPearls(); buildColorCache(); vig = buildVignette(); }
   },
 
   dispose() {
     ctx = null; field = null; pearls = []; cam = null; cursor = null;
+    vig = null; halo = null;
   },
 };
 
@@ -301,16 +304,8 @@ function drawBackground() {
   // 잔상 트레일: 빛 먼지의 여운 — 60fps에서 0.34였던 페이드를 실제 경과에 맞춰 보정
   ctx.fillStyle = "rgba(5,5,7," + trailAlpha(sim).toFixed(3) + ")";
   ctx.fillRect(0, 0, W, H);
-
-  // 미세 비네트(가장자리를 더 어둡게)
-  const g = ctx.createRadialGradient(
-    W * 0.46, H * 0.46, Math.min(W, H) * 0.1,
-    W * 0.5, H * 0.5, Math.max(W, H) * 0.72
-  );
-  g.addColorStop(0, "rgba(0,0,0,0)");
-  g.addColorStop(1, "rgba(0,0,0,0.55)");
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
+  // 미세 비네트: 1회 렌더한 스프라이트를 덮는다(매 프레임 그라디언트 생성·채움 제거)
+  if (vig) ctx.drawImage(vig, 0, 0, W, H);
 }
 
 // --- 입자 렌더 -----------------------------------------------------
@@ -347,13 +342,11 @@ function drawParticles() {
     // 크기: 밝을수록 크게(빛 먼지)
     const sz = (p.size || 1) * (0.6 + lum * 1.7);
 
-    const a = Math.min(1, 0.28 + bright * 0.5);
-    ctx.fillStyle = "rgba(" +
-      clamp255(p.r * bright) + "," +
-      clamp255(p.g * bright) + "," +
-      clamp255(p.b * bright) + "," + a.toFixed(3) + ")";
+    // 밝기는 globalAlpha로(lighter 합성에서 rgb×alpha가 더해짐), 백열 구간은 흰색 혼합색
+    ctx.globalAlpha = particleAlpha(bright);
+    ctx.fillStyle = isHot(bright) ? p.cssHot : p.css;
 
-    if (sz <= 1.2) {
+    if (sz <= RECT_MAX) {
       ctx.fillRect(p.x - sz * 0.5, p.y - sz * 0.5, sz, sz);
     } else {
       ctx.beginPath();
@@ -361,6 +354,7 @@ function drawParticles() {
       ctx.fill();
     }
   }
+  ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
 }
 
@@ -382,16 +376,12 @@ function drawPearls() {
     const pulse = 0.85 + 0.15 * Math.sin(T * 3 + pearls[k]);
     const gr = (p.size || 1) * (2.6 + glow * 6.5) * pulse;
 
-    // 2겹 원: 바깥 halo + 안쪽 코어
-    const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, gr);
-    const ha = (0.12 + glow * 0.6);
-    halo.addColorStop(0, "rgba(255,252,240," + ha.toFixed(3) + ")");
-    halo.addColorStop(0.5, "rgba(230,225,205," + (ha * 0.4).toFixed(3) + ")");
-    halo.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = halo;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, gr, 0, Math.PI * 2);
-    ctx.fill();
+    // 2겹: 바깥 halo(스프라이트) + 안쪽 코어
+    if (halo) {
+      ctx.globalAlpha = 0.12 + glow * 0.6;
+      ctx.drawImage(halo, p.x - gr, p.y - gr, gr * 2, gr * 2);
+      ctx.globalAlpha = 1;
+    }
 
     // 코어 하이라이트
     const ca = 0.5 + glow * 0.5;
@@ -423,7 +413,48 @@ function drawHandCursor() {
   ctx.restore();
 }
 
-function clamp255(v) {
-  v = v | 0;
-  return v < 0 ? 0 : v > 255 ? 255 : v;
+// --- 오프스크린 스프라이트·색 캐시 (init/resize 시 1회) ---------------
+// 입자 색 문자열을 매 프레임 만들지 않는다: 기본색과 백열(흰색 55% 혼합)색을 캐시.
+function buildColorCache() {
+  const ps = field.particles;
+  for (let i = 0; i < ps.length; i++) {
+    const p = ps[i];
+    if (p.css) continue;                              // resize 후 재호출 시 멱등
+    const r = p.r | 0, g = p.g | 0, b = p.b | 0;
+    p.css = "rgb(" + r + "," + g + "," + b + ")";
+    const mix = (c) => (c + (255 - c) * 0.55) | 0;   // 백열: 흰색 쪽으로 55%
+    p.cssHot = "rgb(" + mix(r) + "," + mix(g) + "," + mix(b) + ")";
+  }
+}
+
+// 비네트: 매 프레임 라디얼 그라디언트 전체 화면 채움 대신 1회 렌더 후 drawImage
+function buildVignette() {
+  if (typeof document === "undefined") return null;
+  const c = document.createElement("canvas");
+  c.width = Math.max(1, W | 0); c.height = Math.max(1, H | 0);
+  const g2 = c.getContext("2d");
+  const g = g2.createRadialGradient(
+    W * 0.46, H * 0.46, Math.min(W, H) * 0.1,
+    W * 0.5, H * 0.5, Math.max(W, H) * 0.72
+  );
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.55)");
+  g2.fillStyle = g;
+  g2.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+
+// 진주 헤일로: 따뜻한 흰색 글로우 스프라이트 64×64 (중심 1 → 0.5에서 0.4 → 가장자리 0)
+function buildHalo() {
+  if (typeof document === "undefined") return null;
+  const S = 64, c = document.createElement("canvas");
+  c.width = S; c.height = S;
+  const g2 = c.getContext("2d");
+  const g = g2.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  g.addColorStop(0, "rgba(255,252,240,1)");
+  g.addColorStop(0.5, "rgba(230,225,205,0.4)");
+  g.addColorStop(1, "rgba(0,0,0,0)");
+  g2.fillStyle = g;
+  g2.fillRect(0, 0, S, S);
+  return c;
 }
