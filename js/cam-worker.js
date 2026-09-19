@@ -76,19 +76,25 @@ async function onFrame(m) {
   const ts = Math.max(prevTs + 1, m.ts); prevTs = ts;              // MediaPipe 단조 타임스탬프 요구
   const a = performance.now();
   let landmarks = [];
+  let fail = null;                                                 // null 아니면 이 프레임은 result 대신 fail로 응답
   try {
     const res = landmarker.detectForVideo(m.frame, ts);
     landmarks = res.landmarks || [];
   } catch (e) {
     if (/timestamp/i.test(String(e && e.message))) {                // 타임스탬프 오류는 인스턴스가 망가짐 → 재생성
       try { landmarker.close(); } catch (_) {}
+      landmarker = null;                                            // create 실패 시 닫힌 인스턴스를 남기지 않음(실패하면 null 유지)
       landmarker = await create(delegate); prevTs = -1;
-    } else if (!onFrame.warned) {                                     // 그 외 추론 예외: 빈 결과 유지, 1회만 경고
-      onFrame.warned = true; console.warn("[cam-worker] 추론 예외 — 빈 결과 유지", String(e && e.message || e));
+    } else {                                                          // 그 외 추론 예외: result:[] 대신 fail로 응답해 재시작 유도(1회만 경고)
+      if (!onFrame.warned) {
+        onFrame.warned = true; console.warn("[cam-worker] 추론 예외 — fail 응답", String(e && e.message || e));
+      }
+      fail = String(e && e.message || e);
     }
   } finally {
     try { m.frame.close(); } catch (_) {}
   }
+  if (fail !== null) { self.postMessage({ type: "fail", msg: fail }); return; }
   self.postMessage({ type: "result", landmarks, ts: m.ts, ms: performance.now() - a });
 }
 
@@ -96,7 +102,13 @@ self.onmessage = async (ev) => {
   const m = ev.data;
   try {
     if (m.type === "init") await init(m);
-    else if (m.type === "frame") { if (landmarker) await onFrame(m); else { try { m.frame.close(); } catch (_) {} } }
+    else if (m.type === "frame") {
+      if (landmarker) await onFrame(m);
+      else {                                                          // landmarker 없음(재생성 실패 등) — 프레임만 닫고 fail 응답
+        try { m.frame.close(); } catch (_) {}
+        self.postMessage({ type: "fail", msg: "landmarker 없음" });
+      }
+    }
   } catch (e) {
     self.postMessage({ type: "fail", msg: String(e && e.message || e) });
   }

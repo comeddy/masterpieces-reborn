@@ -38,7 +38,7 @@ export function isStale(nowMs, lastAdvanceMs) { return nowMs - lastAdvanceMs > S
 let stream = null, vid = null, landmarker = null;      // landmarker는 메인 스레드 폴백 전용
 let worker = null, inFlight = false, inFlightSince = 0;   // 워커 모드 상태(한 프레임만 진행 중)
 let pendingWorker = null, pendingAbort = null; // startWorker() 대기 중인 워커·취소 함수 — stop()이 terminate+타이머 정리
-let workerCfg = null;          // 워커 생성 파라미터 { base, numHands } — 준비 후 사망 시 동일 파라미터로 1회 재시작
+let workerCfg = null;          // 워커 생성 파라미터 { base, numHands, restarts } — 준비 후 사망 시 동일 파라미터로 1회 재시작(restarts로 상한 추적)
 let restarting = false, failStreak = 0; // 재시작 진행 중(active() 유지, detect()는 건너뜀) / 연속 fail 메시지 수
 let seamOn = false;            // E2E 시임(window.__CAM_CDN__) 활성 — frame 메시지에 가짜 손 동봉
 const READY_IDLE_MS = 25000;   // 워커 준비 대기: 마지막 메시지(progress/ready/fail) 뒤 이 시간 무응답이면 실패
@@ -87,7 +87,7 @@ export async function request(opts = {}) {
     await v.play();
     if (my !== gen) throw new Error("stale");
     stream = s; vid = v; landmarker = lm; worker = w; inFlight = false; seamOn = seam;
-    workerCfg = w ? { base, numHands } : null; restarting = false; failStreak = 0;
+    workerCfg = w ? { base, numHands, restarts: 0 } : null; restarting = false; failStreak = 0;
     lastVT = -1; lastAdvanceMs = performance.now(); lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
     info = nfo;
     console.info(`[cam] mode=${info.mode} delegate=${info.delegate} p50=${info.p50 ?? "-"}ms renderer=${info.renderer ?? "-"}`);
@@ -154,11 +154,21 @@ function onWorkerDied(e) {                            // 준비 후 워커 onerr
 
 // 준비 후 워커가 죽으면 같은 파라미터로 1회 재시작. 재시작 중 active()는 유지하되 detect()는 워커 없음으로
 // 건너뛰고(죽은 워커의 손 결과는 즉시 비움), 재시작도 실패하면 세션을 내려(stop) active()가 false가 되게 한다.
+// 재시작 상한 1회: workerCfg.restarts가 이미 1 이상이면(직전에 재시작을 써버렸으면) 다시 시도하지 않고
+// 바로 stop() + 안내 경고로 간다.
 async function restartWorker(reason) {
   if (!worker || restarting || !workerCfg) return;
+  if (workerCfg.restarts >= 1) {
+    try { worker.terminate(); } catch (_) {}
+    worker = null;
+    console.warn("[cam] 워커 중단 — 카메라 버튼을 다시 눌러 주세요", reason);
+    stop();
+    return;
+  }
   try { worker.terminate(); } catch (_) {}
   worker = null; inFlight = false; failStreak = 0; restarting = true;
   lmarks = []; last = { n: 0, x: last.x, y: last.y };
+  workerCfg.restarts++;
   const my = gen, cfg = workerCfg;
   try {
     const r = await startWorker(cfg.base, cfg.numHands);
@@ -215,6 +225,7 @@ async function sendFrame(ts) {
     if (seamOn && typeof window !== "undefined") msg.fake = window.__FAKE_HANDS__ || { n: 0, x: 0.5, y: 0.5 };
     w.postMessage(msg, [frame]);
   } catch (e) {
+    if (worker !== w) { try { frame && frame.close(); } catch (_) {} return; }   // stop()으로 srcObject가 비워져 거부된 경우 — 허위 경고 방지(프레임 close는 유지)
     try { if (frame) frame.close(); } catch (_) {}   // postMessage 실패(DataCloneError 등) 시 프레임 누수 방지
     inFlight = false;
     if (!sendFrame.warned) { sendFrame.warned = true; console.warn("[cam] 프레임 전송 실패", e); }
