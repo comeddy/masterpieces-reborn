@@ -83,15 +83,15 @@ For later works the user set a distinctive process rule: instead of being handed
 The user reviewed screenshots after each change; several pieces went through multiple honest iterations:
 
 - **Bull**: the first version was rejected twice ("no power, wrong head direction, too small") and was rebuilt as a full-screen close-up matching the original composition before being replaced by the Picasso homage
-- **Mona Lisa's smile**: an image-reveal solution made the smile visible but was rejected as "too photographic", and a hard-edged high-density face patch was rejected as "alien to the rest" and made the opening gather awkwardly. The current version keeps one uniform grid, raises face density only through a smooth, edgeless field, snaps dots to feature pixels (lip line, eyelids) so the smile survives sampling, and choreographs the gather so body and background condense first and the face rises last
+- **Mona Lisa's smile**: an image-reveal solution made the smile visible but was rejected as "too photographic"; a hard-edged high-density face patch was rejected as "alien to the rest" and for making the opening gather awkwardly. The current version keeps a single uniform base grid with no separate face patch and raises face density only as a smooth, edgeless field. Dots snap to feature pixels (lip line, eyelids) so the smile survives sampling, and the gather is choreographed so body and background condense first and the face rises last
 - **Great Wave full-screen**: the first cover-fit attempt destroyed the iconic silhouette (a uniform starfield) and was reverted; the redo differentiates particle density (empty sky, dense foam and sea) so the hooked wave reads clearly while traveling waves keep the whole screen undulating
 - **Ssireum puppets**: refined across three rounds — crop tiles, then silhouette cutouts with sticks and drop shadows, then background inpainting and stick shadows until no trace of the original wrestlers remained behind the lifted puppet
 
 ### 6. Verification culture
 
-- Node tests (data integrity, particle-engine math, module interface conformance, camera/hand gesture logic) run on every task
+- Node tests (data integrity, particle-engine math, module interface conformance, camera/hand-gesture logic, piece choreography) run on every task
 - Every piece was driven in a real browser (Playwright) — screenshots, console-error checks, interaction simulation, dispose/re-enter cycles
-- Independent per-task reviews plus a final whole-branch review before each merge; content reviews scored 93/100 and 92/100 with findings fixed before deploy
+- Independent per-task reviews plus a final whole-branch review before each merge; every merge passed an independent content gate (85 or higher) with findings fixed before deploy
 
 ## Prerequisites
 
@@ -155,7 +155,7 @@ masterpieces-reborn/
 
 ```bash
 node --test test/
-# 11 tests: data structure, particle-engine math, module integrity
+# Node tests: data integrity, particle-engine math, module interface conformance, camera/hand-gesture logic, piece choreography
 ```
 
 ## Contributing
@@ -241,15 +241,15 @@ Masterpieces Reborn은 호쿠사이의 파도에서 안견의 몽유도원도까
 사용자는 변경마다 스크린샷을 검수했고, 여러 작품이 정직한 반복을 거쳤습니다:
 
 - **황소**: 초판이 두 차례 반려되었습니다("힘찬 기운이 없다, 소머리 방향이 틀렸다, 너무 작다"). 원작 구도와 같은 화면 가득 클로즈업으로 재구성된 뒤, 최종적으로 피카소 오마주로 교체되었습니다
-- **모나리자의 미소**: 이미지 리빌 방식은 미소를 보이게 했지만 "너무 사실적"이라 반려되었고, 경계가 뚜렷한 얼굴 고밀도 패치는 "주변과 이질적"이며 시작 응집이 어색하다는 피드백을 받았습니다. 현재판은 균일 격자를 유지한 채 얼굴 밀도만 경계 없는 연속 필드로 올리고, 점을 특징 픽셀(입술선·눈꺼풀)에 스냅해 미소가 샘플링에서 살아남게 하며, 몸·배경이 먼저 응결하고 얼굴이 마지막에 떠오르도록 응집을 안무합니다
+- **모나리자의 미소**: 이미지 리빌 방식은 미소를 보이게 했지만 "너무 사실적"이라 반려되었고, 경계가 뚜렷한 얼굴 고밀도 패치는 "주변과 이질적"이며 시작 응집이 어색하다는 피드백을 받았습니다. 현재판은 경계가 있는 별도 얼굴 패치를 없애고, 균일한 기본 격자 위에 얼굴 밀도만 경계 없는 연속 필드로 올립니다. 점을 특징 픽셀(입술선·눈꺼풀)에 스냅해 미소가 샘플링에서 살아남게 하고, 몸·배경이 먼저 응결하고 얼굴이 마지막에 떠오르도록 응집을 안무합니다
 - **파도 전체화면**: 첫 cover-fit 시도는 상징적 실루엣을 파괴해(균일한 별밭) revert되었습니다. 재작업은 입자 밀도를 차별화(하늘은 비우고 포말·바다는 조밀)해 갈고리 파도가 또렷이 읽히면서 진행파가 화면 전체를 일렁이게 합니다
 - **씨름 인형**: 세 라운드에 걸쳐 다듬었습니다 — 크롭 타일, 실루엣 오리기+막대+드롭섀도, 그리고 배경 인페인트와 막대 그림자까지. 들린 인형 뒤에 원작 씨름꾼의 흔적이 전혀 남지 않을 때까지
 
 ### 6. 검증 문화
 
-- Node 테스트 11개(데이터 무결성, 입자 엔진 수학, 모듈 인터페이스 준수)를 모든 태스크에서 실행합니다
+- Node 테스트(데이터 무결성, 입자 엔진 수학, 모듈 인터페이스 준수, 카메라·손 제스처 로직, 작품 안무)를 모든 태스크에서 실행합니다
 - 모든 작품을 실제 브라우저(Playwright)로 구동했습니다 — 스크린샷, 콘솔 에러 확인, 인터랙션 시뮬레이션, dispose·재진입 사이클
-- 태스크별 독립 리뷰에 더해 머지 전 whole-branch 최종 리뷰를 거쳤고, 콘텐츠 리뷰는 93/100·92/100점으로 지적 사항을 수정한 뒤 배포했습니다
+- 태스크별 독립 리뷰에 더해 머지 전 whole-branch 최종 리뷰를 거쳤고, 모든 머지는 독립 콘텐츠 게이트(85점 이상)를 통과했고 지적 사항을 수정한 뒤 배포했습니다
 
 ## 사전 요구 사항
 
