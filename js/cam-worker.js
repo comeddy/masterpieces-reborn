@@ -5,6 +5,7 @@
 // 영상 프레임은 이 워커 안에서만 소비되고 저장·전송하지 않는다.
 let vision = null, landmarker = null, delegate = null, numHands = 2, model = "", fileset = null;
 let prevTs = -1;
+let recreating = false;   // 타임스탬프 오류로 랜드마커 재생성 중(수 초 소요) — 이 사이 도착 프레임은 transient fail로 응답
 const SW_RENDERER = /SwiftShader|llvmpipe|Software|Basic Render/i;
 const GPU_SLOW_MS = 40;   // GPU 델리게이트 벤치 p50이 이보다 크면 CPU로
 // 준비 진행 하트비트 — cam.js는 마지막 메시지 뒤 일정 시간 무응답일 때만 실패로 본다.
@@ -84,7 +85,12 @@ async function onFrame(m) {
     if (/timestamp/i.test(String(e && e.message))) {                // 타임스탬프 오류는 인스턴스가 망가짐 → 재생성
       try { landmarker.close(); } catch (_) {}
       landmarker = null;                                            // create 실패 시 닫힌 인스턴스를 남기지 않음(실패하면 null 유지)
-      landmarker = await create(delegate); prevTs = -1;
+      recreating = true;                     // 재생성(수 초) 중 도착하는 프레임은 transient fail — cam.js의 재시작 카운트에 넣지 않는다
+      try {
+        landmarker = await create(delegate); prevTs = -1;
+      } finally {
+        recreating = false;                  // 성공·실패 모두 재생성 구간 종료
+      }
     } else {                                                          // 그 외 추론 예외: result:[] 대신 fail로 응답해 재시작 유도(1회만 경고)
       if (!onFrame.warned) {
         onFrame.warned = true; console.warn("[cam-worker] 추론 예외 — fail 응답", String(e && e.message || e));
@@ -104,9 +110,10 @@ self.onmessage = async (ev) => {
     if (m.type === "init") await init(m);
     else if (m.type === "frame") {
       if (landmarker) await onFrame(m);
-      else {                                                          // landmarker 없음(재생성 실패 등) — 프레임만 닫고 fail 응답
+      else {                                                          // landmarker 없음(재생성 중 또는 재생성 실패) — 프레임만 닫고 fail 응답
         try { m.frame.close(); } catch (_) {}
-        self.postMessage({ type: "fail", msg: "landmarker 없음" });
+        // 재생성 중(transient) fail은 정상 복구 과정 — cam.js가 failStreak에 세지 않도록 표시한다.
+        self.postMessage({ type: "fail", msg: recreating ? "랜드마커 재생성 중" : "landmarker 없음", transient: recreating });
       }
     }
   } catch (e) {

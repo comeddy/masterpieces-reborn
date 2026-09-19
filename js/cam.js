@@ -142,7 +142,9 @@ function onWorkerMessage(ev) {
     ({ lmarks, last } = applyLandmarks(m.landmarks, last));
     inFlight = false; failStreak = 0;
   } else if (m.type === "fail") {
-    console.warn("[cam] 워커 추론 실패", m.msg); inFlight = false;
+    inFlight = false;
+    if (m.transient) return;   // 랜드마커 재생성 중인 정상 복구 — failStreak·재시작 대상 아님, 경고도 생략
+    console.warn("[cam] 워커 추론 실패", m.msg);
     if (++failStreak >= FAIL_RESTART_N) restartWorker(`fail ${failStreak}회 연속: ${m.msg}`);
   }
 }
