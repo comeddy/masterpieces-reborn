@@ -2,6 +2,8 @@
 // 작품은 opts.cam 경유로 active()/hands()/video()/landmarks()를 폴링한다.
 // MediaPipe HandLandmarker는 request() 안에서만 동적 import — 버튼을 누르기
 // 전에는 아무것도 내려받지 않고, 이 모듈은 node에서 import-safe다.
+// 추론은 기본적으로 cam-worker.js(클래식 Worker)에서 돌아 렌더 루프가 추론 시간에
+// 멈추지 않는다(프레임 전송·결과 캐시). 워커를 못 띄우면 기존 메인 스레드 경로로 폴백.
 // 영상은 로컬 추론 전용 — 녹화·전송·저장하지 않는다.
 // 좌표계: hands()·landmarks()는 모두 **거울 보정 후**(x → 1-x) 0..1 정규화 좌표다.
 // 관객이 오른쪽으로 손을 움직이면 x가 커진다. 주 손은 landmarks()[0].
@@ -33,56 +35,102 @@ export function applyLandmarks(raw, prevLast) {
 export const STALE_MS = 500;  // 비디오 프레임이 이만큼 전진하지 않으면 손 결과를 비운다
 export function isStale(nowMs, lastAdvanceMs) { return nowMs - lastAdvanceMs > STALE_MS; }
 
-let stream = null, vid = null, landmarker = null;
+let stream = null, vid = null, landmarker = null;      // landmarker는 메인 스레드 폴백 전용
+let worker = null, inFlight = false, inFlightSince = 0;   // 워커 모드 상태(한 프레임만 진행 중)
+let seamOn = false;            // E2E 시임(window.__CAM_CDN__) 활성 — frame 메시지에 가짜 손 동봉
+const READY_TIMEOUT_MS = 20000, INFLIGHT_WATCHDOG_MS = 3000;
 let gen = 0;                   // stop()·재요청마다 증가 — 늦은 완료 무효화
 let lastVT = -1, lastAdvanceMs = 0, lmarks = [];
 let last = { n: 0, x: 0.5, y: 0.5 };
 let info = { mode: null, delegate: null, p50: null, renderer: null }; // stats() 백업 상태
 
-export function active() { return !!(stream && landmarker); }
+export function active() { return !!(stream && (landmarker || worker)); }
 export function stats() { return { ...info }; }
 
 export async function request(opts = {}) {
   if (active()) return true;
   const numHands = opts.numHands === 1 ? 1 : 2; // 03·01·11번처럼 주 손만 쓰면 추론 절반
   const my = ++gen;
-  let s = null, lm = null, v = null, delegate = null;
+  let s = null, lm = null, v = null, w = null, nfo = null;
   try {
     s = await navigator.mediaDevices.getUserMedia({
       video: { width: 640, height: 480, facingMode: "user" },
     });
     if (my !== gen) throw new Error("stale");
     const base = cdnBase();
-    const vision = await import(`${base}/vision_bundle.mjs`);
+    const seam = typeof window !== "undefined" && !!window.__CAM_CDN__;
+    // 1) 워커 경로: 추론을 메인 스레드 밖으로
+    const r = await startWorker(base, numHands).catch((e) => { console.warn("[cam] 워커 불가 — 메인 스레드 폴백", e); return null; });
+    if (r) { w = r.w; nfo = r.info; }
     if (my !== gen) throw new Error("stale");
-    const fileset = await vision.FilesetResolver.forVisionTasks(`${base}/wasm`);
-    if (my !== gen) throw new Error("stale");
-    const mk = (d) => vision.HandLandmarker.createFromOptions(fileset, {
-      baseOptions: { modelAssetPath: MODEL_URL, delegate: d },
-      runningMode: "VIDEO", numHands,
-    });
-    try { lm = await mk("GPU"); delegate = "GPU"; }
-    catch (_) { lm = await mk("CPU"); delegate = "CPU"; } // GPU 불가 환경 폴백
-    if (my !== gen) throw new Error("stale");
+    if (!w) {
+      // 2) 폴백: 현행 메인 스레드 경로(동기 detect)
+      const vision = await import(`${base}/vision_bundle.mjs`);
+      if (my !== gen) throw new Error("stale");
+      const fileset = await vision.FilesetResolver.forVisionTasks(`${base}/wasm`);
+      if (my !== gen) throw new Error("stale");
+      const mk = (delegate) => vision.HandLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: MODEL_URL, delegate }, runningMode: "VIDEO", numHands,
+      });
+      let d = "GPU";
+      try { lm = await mk("GPU"); } catch (_) { lm = await mk("CPU"); d = "CPU"; } // GPU 불가 환경 폴백
+      if (my !== gen) throw new Error("stale");
+      nfo = { mode: "main", delegate: d, p50: null, renderer: null };
+    }
     v = document.createElement("video");
     v.srcObject = s; v.muted = true; v.playsInline = true;
     await v.play();
     if (my !== gen) throw new Error("stale");
-    stream = s; vid = v; landmarker = lm;
+    stream = s; vid = v; landmarker = lm; worker = w; inFlight = false; seamOn = seam;
     lastVT = -1; lastAdvanceMs = performance.now(); lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
-    info = { mode: "main", delegate, p50: null, renderer: null };
+    info = nfo;
+    console.info(`[cam] mode=${info.mode} delegate=${info.delegate} p50=${info.p50 ?? "-"}ms renderer=${info.renderer ?? "-"}`);
     return true;
   } catch (e) {
     if (s) for (const t of s.getTracks()) t.stop(); // 늦은 완료·중간 실패 시 정리
     if (v) v.srcObject = null;
     if (lm) { try { lm.close(); } catch (_) {} }
+    if (w) { try { w.terminate(); } catch (_) {} }
     if (e.message !== "stale") console.warn("카메라 사용 불가", e);
     return false;
   }
 }
 
+// 워커 생성 → init → ready 대기(타임아웃). 실패는 throw. 성공 시 { w, info }를 넘기고
+// 모듈 상태(info)는 request()가 세대 가드 통과 후에만 반영한다.
+function startWorker(base, numHands) {
+  return new Promise((resolve, reject) => {
+    let w;
+    try { w = new Worker(new URL("./cam-worker.js", import.meta.url)); }   // 클래식 워커(type 없음)
+    catch (e) { reject(e); return; }
+    const timer = setTimeout(() => { w.terminate(); reject(new Error("worker ready timeout")); }, READY_TIMEOUT_MS);
+    w.onerror = (e) => { clearTimeout(timer); w.terminate(); reject(e.error || new Error(e.message || "worker error")); };
+    w.onmessage = (ev) => {
+      const m = ev.data;
+      if (m.type === "ready") {
+        clearTimeout(timer);
+        w.onmessage = onWorkerMessage; w.onerror = (e) => console.warn("[cam] 워커 오류", e.message || e);
+        resolve({ w, info: { mode: "worker", delegate: m.delegate, p50: m.p50, renderer: m.renderer } });
+      } else if (m.type === "fail") { clearTimeout(timer); w.terminate(); reject(new Error(m.msg)); }
+    };
+    w.postMessage({ type: "init", base, model: MODEL_URL, numHands });
+  });
+}
+
+function onWorkerMessage(ev) {
+  if (ev.target !== worker) return;                   // stop()·재요청 뒤 늦게 도착한 옛 워커 메시지 무시
+  const m = ev.data;
+  if (m.type === "result") {
+    ({ lmarks, last } = applyLandmarks(m.landmarks, last));
+    inFlight = false;
+  } else if (m.type === "fail") {
+    console.warn("[cam] 워커 추론 실패", m.msg); inFlight = false;
+  }
+}
+
 // 새 비디오 프레임에서만 추론(중복 추론 방지). hands()/landmarks() 어느 쪽이
-// 먼저 불려도 프레임당 1회만 detectForVideo가 돈다. 예외는 직전 결과를 유지.
+// 먼저 불려도 프레임당 1회만 돈다. 워커 모드: 프레임을 넘기고 즉시 반환(결과는 메시지로
+// 캐시에 반영, 한 프레임만 진행 중). 메인 폴백: 동기 detectForVideo, 예외는 직전 결과 유지.
 function detect() {
   if (!active() || vid.readyState < 2) return;
   const nowMs = performance.now();
@@ -92,10 +140,38 @@ function detect() {
     return;
   }
   lastVT = vid.currentTime; lastAdvanceMs = nowMs;
+  if (worker) {
+    if (inFlight) {
+      if (nowMs - inFlightSince > INFLIGHT_WATCHDOG_MS) {         // 워커 행 회복
+        inFlight = false;
+        if (!detect.hung) { detect.hung = true; console.warn("[cam] 워커 응답 지연 — 프레임 재전송"); }
+      } else return;                                              // 한 프레임만 진행 중(백프레셔)
+    }
+    inFlight = true; inFlightSince = nowMs;
+    sendFrame(nowMs);                                             // 비동기 — detect()는 동기 유지
+    return;
+  }
   let res;
   try { res = landmarker.detectForVideo(vid, nowMs); }
   catch (e) { if (!detect.warned) { detect.warned = true; console.warn("손 탐지 실패 — 직전 결과 유지", e); } return; }
   ({ lmarks, last } = applyLandmarks(res.landmarks, last));
+}
+
+// 현재 비디오 프레임을 워커로 이전(transfer). VideoFrame 우선, 없으면 createImageBitmap.
+async function sendFrame(ts) {
+  const w = worker, v = vid;
+  try {
+    let frame;
+    if (typeof VideoFrame !== "undefined") { try { frame = new VideoFrame(v); } catch (_) {} }
+    if (!frame) frame = await createImageBitmap(v);
+    if (worker !== w) { try { frame.close(); } catch (_) {} return; }   // 대기 중 stop()됨
+    const msg = { type: "frame", frame, ts };
+    if (seamOn && typeof window !== "undefined") msg.fake = window.__FAKE_HANDS__ || { n: 0, x: 0.5, y: 0.5 };
+    w.postMessage(msg, [frame]);
+  } catch (e) {
+    inFlight = false;
+    if (!sendFrame.warned) { sendFrame.warned = true; console.warn("[cam] 프레임 전송 실패", e); }
+  }
 }
 
 export function hands() { detect(); return last; }
@@ -134,7 +210,8 @@ export function stop() {
   if (stream) for (const t of stream.getTracks()) t.stop(); // 카메라 표시등 끄기
   if (vid) vid.srcObject = null;
   if (landmarker) { try { landmarker.close(); } catch (_) {} }
-  stream = null; vid = null; landmarker = null;
+  if (worker) { try { worker.terminate(); } catch (_) {} }  // 워커 종료(진행 중 프레임도 함께 폐기)
+  stream = null; vid = null; landmarker = null; worker = null; inFlight = false; seamOn = false;
   lastVT = -1; lastAdvanceMs = 0; lmarks = []; last = { n: 0, x: 0.5, y: 0.5 };
   info = { mode: null, delegate: null, p50: null, renderer: null };
 }
