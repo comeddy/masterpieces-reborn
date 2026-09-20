@@ -1,9 +1,12 @@
 // js/pieces/04-mona-lisa.js
 // After Leonardo — Mona Lisa (c.1503) · 점묘 안개 초상
-// 점(입자)만으로 얼굴을 해상한다: 점 간격은 전 영역 균일하게 두고, 얼굴 필드의
-// 점은 셀 안에서 가장 어두운 픽셀을 골라(특징 보존 샘플) 입술선·눈꺼풀이 격자에
-// 묻히지 않게 한다. 응집 시 얼굴 점의 명암 대비를 넓히고 어두운 점을 조금 키워
-// 눈·코·입(미소)이 점묘처럼 읽히게 한다. 흩어지면 sfumato 연기.
+// 점(입자)만으로 얼굴을 해상한다: 점 밀도는 원작의 빛을 따른다 — 어두운 바탕의 점묘는
+// 빛을 찍는 것이라 밝은 곳(얼굴·가슴·손)이 촘촘하고 어두운 곳(드레스·머리카락)은 성기며,
+// 굵은 명암 경계(눈·입술선·손가락 윤곽·소매 주름)가 조금 더 촘촘하다. 얼굴을 기하로
+// 특별 취급하지 않으므로 머리 주변에 밀도 고리가 생기지 않는다. 경계가 지나는 셀은 가장
+// 어두운 픽셀에 점을 스냅해(특징 보존 샘플) 입술선·눈꺼풀이 격자에 묻히지 않게 하고,
+// 응집 시 얼굴 점의 명도 대비를 넓히고 밝은 점을 조금 키워 눈·코·입(미소)이 점묘처럼
+// 읽히게 한다. 흩어지면 sfumato 연기.
 //
 // 오프닝·재응집 안무: 입자마다 얼굴 중심에서의 거리로 정해지는 지연 뒤에 스프링이
 // 살아난다 — 배경·몸이 먼저 응결하고 얼굴이 마지막에 파면처럼 떠오른다. 지연·
@@ -20,16 +23,37 @@ const MONO = [116, 98, 76];   // 안개 상태의 갈색-회갈색 모노톤
 // 정의된다: d=0 중심, d=1 타원 경계.
 export const FACE_OVAL = { cu: 0.45, cv: 0.225, ru: 0.145, rv: 0.135 };
 export const FACE_FADE = 0.6;        // 렌더 가중치 감쇠 대역: d 1.0 → 1.6 에서 1 → 0
-export const FACE_BOOST = 3.0;       // 얼굴 중심 점 밀도 배율(바깥 1, faceWeight로 연속) — 미소 곡률(≈3px)이
-                                     // 기본 격자 간격(≈5px)보다 작아 얼굴만 더 촘촘해야 읽힌다. 경계는 없다.
+// 점 밀도 결정(내용 기반): 미세 격자 셀마다 중요도 imp = W_BRIGHT·밝기^BRIGHT_GAMMA + W_EDGE·min(1, 명암폭/EDGE_NORM),
+// 채택 확률 p = clamp(DENSITY_FLOOR + K·imp, ·, 1). 미세 격자 간격은 step/√DENSITY_MAX 라 p=1 이면 기본
+// 밀도의 DENSITY_MAX 배, p=DENSITY_FLOOR 이면 그 DENSITY_FLOOR 배(하한 — 어두운 드레스도 실루엣 유지).
+// K 는 총량이 count·DENSITY_TOTAL 이 되도록 이분 탐색으로 정한다. 미소 곡률(≈3px)이 기본 격자 간격
+// (≈5px)보다 작아 어딘가는 촘촘해야 하는데, 그 '어딘가'를 얼굴 타원이 아니라 원작의 빛과 경계가 정한다.
+export const DENSITY_MAX = 2.8;
+export const DENSITY_FLOOR = 0.2;
+export const DENSITY_TOTAL = 1.2;    // 기본 count 대비 실제 총량 배율(일반 12,000 → ≈14,400)
+export const W_BRIGHT = 1.0;
+export const BRIGHT_GAMMA = 1.5;     // 밝기 지수(클수록 가장 밝은 곳에 더 몰림) — 2면 가슴이 얼굴보다 과하게 우세
+export const W_EDGE = 0.8;
+export const EDGE_NORM = 60;         // 이 명암폭(3×3 평균 명도 최대−최소)에서 경계 항이 1로 포화
+export const FEATURE_EDGE = 12;      // 이 명암폭 이상인 셀만 특징 스냅 후보(평탄 셀은 지터)
+// 얼굴 피부 항: 얼굴 타원 가중치 × 피부빛(따뜻하고 중간 이상 밝은 색)만 더 촘촘하게. 기하(타원)만으로
+// 올리면 머리 옆 하늘·머리카락까지 촘촘해져 고리가 보이므로, 색으로 걸러 얼굴·목 피부에만 걸리게 한다.
+export const W_FACE = 1.5;
+// 렌더용 상대 밀도 버킷(이동 중 안개 정규화 계수 1/dens 를 몇 단계로만 쓴다). 입자를 이 버킷으로
+// 정렬해 두면 이동 중(모두 MONO 색) 연속 입자의 fillStyle 문자열이 같아 캔버스 색 파싱 비용이 준다.
+export const DENS_BUCKETS = [0.56, 1.0, 1.7, 2.8];
+export function densBucket(d) {
+  let best = 0;
+  for (let i = 1; i < DENS_BUCKETS.length; i++) if (Math.abs(DENS_BUCKETS[i] - d) < Math.abs(DENS_BUCKETS[best] - d)) best = i;
+  return best;
+}
 export const FEATURE_CONTRAST = 35;  // 특징 셀 판정: 셀 평균 명도 − 최암점 명도(3×3 평균 기준) ≥ 이 값이면
                                      // 선·그늘이 지나는 셀 → 최암점에 스냅. 평탄한 피부 셀은 지터 위치(격자 무늬 방지)
-// 입 서브필드(자산 실측 · 입술선과 양 입꼬리 그늘을 감싸는 타원). 미소는 sfumato라 저대비이고
-// 곡률이 작아, 얼굴 필드 위에 국소로 (1) 밀도를 MOUTH_BOOST까지 더 올리고 (2) 특징 임계를 낮춰
-// 입꼬리 그늘도 스냅되게 하고 (3) 밝은 점 확대를 줄여 입술선을 덮지 않게 한다. 경계는 smoothstep.
+// 입 서브필드(자산 실측 · 입술선과 양 입꼬리 그늘을 감싸는 타원). 미소는 sfumato라 저대비여서
+// 이 안에서만 (1) 특징 임계를 낮춰 입꼬리 그늘도 스냅되게 하고 (2) 밝은 점 확대를 줄여 입술선을
+// 덮지 않게 한다. 밀도는 올리지 않는다(밀도는 내용 기반 규칙 하나로 통일). 경계는 smoothstep.
 export const MOUTH = { cu: 0.455, cv: 0.312, ru: 0.058, rv: 0.026 };
 export const MOUTH_FADE = 0.8;               // 가중치 감쇠 대역: d 1.0 → 1.8 (얼굴 타원 안에 머무는 최대)
-export const MOUTH_BOOST = 5.5;              // 입 중심 총 밀도 배율(얼굴 FACE_BOOST 포함, 바깥은 FACE_BOOST로 수렴)
 export const MOUTH_FEATURE_CONTRAST = 18;    // 입 중심 특징 임계(바깥은 FEATURE_CONTRAST로 수렴)
 export const FACE_SPRING_MIN = 0.85; // 얼굴 중심 상시 스프링 비율(바깥 1) — 살짝만 느리게(0.6 이하는 수 초 기어감)
 export const GATHER_MAX_DELAY = 1.2; // 응집 안무: 얼굴 중심 최대 지연(초) — 감쇠(3.4)상 이후 ~3초 더 걸려 안착
@@ -85,6 +109,29 @@ export function gatherEndFor(scale) {
   return (GATHER_MAX_DELAY + GATHER_JITTER) * scale + GATHER_RAMP;
 }
 
+// 피부빛 0..1: 적−청 차(따뜻함)와 명도가 모두 충분할 때 1. 하늘(청록·r−b≈0)·머리카락·드레스(어두움)는 0.
+export function skinness(r, g, b) {
+  const warm = Math.min(1, Math.max(0, (r - b - 20) / 50));
+  const lum = 0.3 * r + 0.59 * g + 0.11 * b;
+  const lit = Math.min(1, Math.max(0, (lum - 70) / 60));
+  return warm * lit;
+}
+
+// 셀 중요도: 밝기(0..1)^BRIGHT_GAMMA + 명암폭(0..255)의 포화 항 + 얼굴 피부 항(0..1).
+export function importanceOf(bright, edge, face = 0) {
+  return W_BRIGHT * Math.pow(bright, BRIGHT_GAMMA) + W_EDGE * Math.min(1, edge / EDGE_NORM) + W_FACE * face;
+}
+
+// 채택 확률 p_i = min(1, DENSITY_FLOOR + K·imp_i) 의 합이 target 이 되는 K (이분 탐색, 단조).
+// 모든 p_i 가 1이어도 target 에 못 미치면 상한 K 를 돌려준다(작은 이미지 방어).
+export function solveK(imps, target) {
+  const expect = (k) => { let sum = 0; for (const v of imps) sum += Math.min(1, DENSITY_FLOOR + k * v); return sum; };
+  let lo = 0, hi = 8;
+  if (expect(hi) < target) return hi;
+  for (let i = 0; i < 28; i++) { const mid = (lo + hi) / 2; if (expect(mid) < target) lo = mid; else hi = mid; }
+  return (lo + hi) / 2;
+}
+
 // 응집 스프링 비율: 지연 전 GATHER_IDLE_K, 지연 뒤 GATHER_RAMP 동안 smoothstep으로 1
 export function gatherSpring(t, delay) {
   if (t <= delay) return GATHER_IDLE_K;
@@ -99,6 +146,9 @@ let cx0 = 0, cy0 = 0;          // 입자 목표 바운딩 박스 중심
 let gatherT = 0;               // 응집 안무 경과 시간(초)
 let gathering = false;         // 안무 진행 중이면 입자별 스프링을 매 프레임 갱신
 let gatherEnd = 0;             // 안무 종료 시각 — 이후 스프링은 상시값으로 고정
+let densMap = null;            // 목표점 픽셀 키 → 상대 밀도(이동 중 안개 밝기 정규화용), 폴백이면 null
+let densSorted = false;        // 입자를 밀도 버킷으로 한 번 정렬했는가(init 후 첫 tagParticles)
+let imgW = 0, imgH = 0;        // densMap 키 계산용 자산 크기
 
 // 대비 확장 상한: 얼굴 가중치·응집도가 1일 때 명도 대비 배율 1 + FACE_CONTRAST
 const FACE_CONTRAST = 0.3;
@@ -123,6 +173,7 @@ export default {
     });
 
     buildBackground();
+    densSorted = false;
     tagParticles(); // 얼굴 필드(렌더 가중치·스프링 비율·지연) · 숨쉬기 기준 목표 기록
     startGather();  // 오프닝: 배경·몸 먼저, 얼굴 마지막
   },
@@ -161,18 +212,21 @@ export default {
     tagParticles();
   },
 
-  dispose() { ctx = null; field = null; bg = null; gathering = false; },
+  dispose() { ctx = null; field = null; bg = null; gathering = false; densMap = null; },
 };
 
 // ── 목표점 구성: 단일 균일 격자 + 얼굴 필드 특징 보존 샘플 ─────────────
 function buildPoints(img) {
-  if (!img) return { points: makePortraitPoints(), aspect: 0.75 }; // 폴백: 절차적 실루엣
+  if (!img) { densMap = null; return { points: makePortraitPoints(), aspect: 0.75 }; } // 폴백: 절차적 실루엣
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
-  // 기본 격자 목표치(얼굴·입 격자 가산 전). 실제 총량은 얼굴 필드 가산으로 약 1.2배(일반 ≈14,500).
+  // 기본 count(균일 격자였을 때의 점 수). 실제 총량은 DENSITY_TOTAL 배(일반 ≈14,400).
   const total = reduced ? 7400 : 12000;
   const points = samplePortrait(img, total);
-  shuffle(points); // 화면 면적 캡(w*h/110)이 얼굴·배경을 고르게 자르도록
+  imgW = iw; imgH = ih;
+  densMap = new Map();
+  for (const q of points) densMap.set(Math.round(q.v * ih) * iw + Math.round(q.u * iw), q.dens);
+  shuffle(points); // 화면 면적 캡(w*h/110)이 밝은 곳·어두운 곳을 같은 비율로 자르도록
   return { points, aspect: iw / ih };
 }
 
@@ -187,25 +241,27 @@ function samplePortrait(image, count) {
   return samplePixels(g.getImageData(0, 0, iw, ih).data, iw, ih, count, Math.random);
 }
 
-// 픽셀 배열 → 목표점 {u,v,r,g,b}[] (순수 · 테스트 대상)
-// · 기본 격자: 전 영역 동일 간격(엔진 samplePoints와 같은 지터 격자, count개 목표).
-// · 얼굴 격자: 간격 step/√FACE_BOOST의 두 번째 격자를 얼굴 필드 안에서만 가중치 확률
-//   fw·(1−1/FACE_BOOST)로 채택 → 밀도가 1 → FACE_BOOST배로 연속 증가(경계 없음).
-// · 특징 보존: 얼굴 필드의 셀은(가중치 확률로) 3×3 평균 명도를 훑어, 셀 평균보다
-//   FEATURE_CONTRAST 이상 어두운 최암점이 있으면(선·그늘이 지나는 셀) 그 픽셀의 위치·색을
-//   채택한다 — 셀 크기의 입술선·눈꺼풀·콧구멍 그늘이 무작위 지터에 묻히지 않고 점 하나로
-//   살아남는다. 평탄한 피부 셀은 지터 위치에 3×3 평균색(균열 필터) — 최암점 스냅을 평탄한
-//   셀에도 적용하면 동률 픽셀(셀 좌상단)로 몰려 격자 무늬·군집이 생긴다.
-// · 입 격자: 간격 step/√MOUTH_BOOST의 세 번째 격자를 입 서브필드 안에서 mw·(1−FACE_BOOST/MOUTH_BOOST)
-//   확률로 채택 → 얼굴 밀도 위에 입 중심 MOUTH_BOOST배까지 연속 증가. 특징 임계도 입 중심에서
-//   MOUTH_FEATURE_CONTRAST로 낮아진다(입꼬리 그늘은 저대비).
-// · 같은 픽셀을 여러 격자가 고르면 한 번만 넣는다.
+// 픽셀 배열 → 목표점 {u,v,r,g,b,dens}[] (순수 · 테스트 대상)
+// · 미세 격자(간격 step/√DENSITY_MAX)로 전 영역을 훑어 셀마다 3×3 평균 명도의 평균(밝기)과
+//   최대−최소(명암폭)를 재고 중요도 imp 를 만든다. 채택 확률 p = min(1, DENSITY_FLOOR + K·imp),
+//   K 는 총량 count·DENSITY_TOTAL 을 맞추는 값(solveK). 밝은 곳·경계가 촘촘, 어두운 평탄부는 성김.
+// · 특징 보존: 명암폭이 FEATURE_EDGE 이상인 채택 셀은 3×3 평균 명도를 훑어 셀 평균보다 thr 이상
+//   어두운 최암점이 있으면(선·그늘이 지나는 셀) 그 픽셀의 위치·색을 채택한다 — 셀 크기의 입술선·
+//   눈꺼풀·손가락 윤곽이 무작위 지터에 묻히지 않고 점 하나로 살아남는다. thr 는 얼굴 밖·안
+//   FEATURE_CONTRAST, 입 서브필드 중심에서 MOUTH_FEATURE_CONTRAST(입꼬리 그늘은 저대비).
+//   평탄 셀은 지터 위치에 원색 — 최암점 스냅을 평탄 셀에도 적용하면 동률 픽셀(셀 좌상단)로 몰려
+//   격자 무늬·군집이 생긴다.
+// · dens = p·DENSITY_MAX: 그 자리의 상대 밀도(기본 격자 1 기준). 렌더가 이동 중 안개 밝기를 이 값으로
+//   나눠 밀도가 높은 곳이 홀로 밝은 덩어리로 뜨지 않게 한다.
+// · 같은 픽셀은 한 번만 넣는다.
 export function samplePixels(data, iw, ih, count, rnd) {
   const step = Math.max(1, Math.sqrt((iw * ih) / count));
+  const fstep = step / Math.sqrt(DENSITY_MAX);
+  const stride = fstep >= 4 ? 2 : 1;                // 중요도 추정용 픽셀 보폭(비용 1/4)
   const pts = [];
   const seen = new Set();
   const m = [0, 0, 0];
-  const mean3 = (x, y) => {                       // 3×3 평균색 (경계 클램프)
+  const mean3 = (x, y) => {                          // 3×3 평균색 (경계 클램프)
     let r = 0, gg = 0, b = 0;
     for (let dy = -1; dy <= 1; dy++) {
       const yy = Math.min(ih - 1, Math.max(0, y + dy));
@@ -217,15 +273,14 @@ export function samplePixels(data, iw, ih, count, rnd) {
     }
     m[0] = r / 9; m[1] = gg / 9; m[2] = b / 9;
   };
-  const push = (xi, yi, r, g, b) => {
+  const push = (xi, yi, r, g, b, dens) => {
     const k = yi * iw + xi;
     if (seen.has(k)) return;
     seen.add(k);
-    pts.push({ u: xi / iw, v: yi / ih, r: r | 0, g: g | 0, b: b | 0 });
+    pts.push({ u: xi / iw, v: yi / ih, r: r | 0, g: g | 0, b: b | 0, dens });
   };
-  // 셀 [x,x1)×[y,y1) 하나를 샘플: 특징 보존(특징 셀은 최암점 스냅, 평탄 셀은 지터+평균색) 또는 원색 지터.
-  // thr = 이 셀의 특징 임계(얼굴 FEATURE_CONTRAST → 입 중심 MOUTH_FEATURE_CONTRAST)
-  const cell = (x, y, x1, y1, feature, thr) => {
+  // 셀 [x,x1)×[y,y1) 하나를 샘플: feature 면 특징 스냅 시도(실패 시 지터+평균색), 아니면 원색 지터
+  const cell = (x, y, x1, y1, feature, thr, dens) => {
     const xi = Math.min(iw - 1, (x + rnd() * (x1 - x)) | 0); // 지터로 격자 무늬 방지
     const yi = Math.min(ih - 1, (y + rnd() * (y1 - y)) | 0);
     if (feature) {
@@ -239,55 +294,46 @@ export function samplePixels(data, iw, ih, count, rnd) {
         }
       }
       if (n === 0) return;
-      if (sum / n - best >= thr) { push(bx, by, br, bgc, bb); return; }
+      if (sum / n - best >= thr) { push(bx, by, br, bgc, bb, dens); return; }
       mean3(xi, yi);
-      push(xi, yi, m[0], m[1], m[2]);
+      push(xi, yi, m[0], m[1], m[2], dens);
     } else {
       const i = (yi * iw + xi) * 4;
       if (data[i + 3] < 8) return;
-      push(xi, yi, data[i], data[i + 1], data[i + 2]);
+      push(xi, yi, data[i], data[i + 1], data[i + 2], dens);
     }
   };
-  // 셀 중심의 얼굴·입 가중치와 특징 임계
+  // 1) 미세 격자 훑기 → 셀 중요도
+  const cells = [];
+  for (let y = 0; y < ih; y += fstep) {
+    for (let x = 0; x < iw; x += fstep) {
+      const x1 = Math.min(iw, x + fstep), y1 = Math.min(ih, y + fstep);
+      let lo = Infinity, hi = -Infinity, sum = 0, n = 0, sr = 0, sg = 0, sb = 0;
+      for (let yy = y | 0; yy < y1; yy += stride) {
+        for (let xx = x | 0; xx < x1; xx += stride) {
+          mean3(xx, yy);
+          const L = 0.3 * m[0] + 0.59 * m[1] + 0.11 * m[2];
+          if (L < lo) lo = L; if (L > hi) hi = L; sum += L; n++;
+          sr += m[0]; sg += m[1]; sb += m[2];
+        }
+      }
+      if (n === 0) continue;
+      const e = hi - lo;
+      const fw = faceWeight(faceDist((x + x1) / (2 * iw), (y + y1) / (2 * ih)));
+      const face = fw > 0 ? fw * skinness(sr / n, sg / n, sb / n) : 0;
+      cells.push({ x, y, x1, y1, e, imp: importanceOf(sum / n / 255, e, face) });
+    }
+  }
+  // 2) 총량을 맞추는 K
+  const K = solveK(cells.map((c) => c.imp), count * DENSITY_TOTAL);
+  // 3) 채택·샘플 (특징 임계는 입 서브필드에서 낮아진다)
   const thrAt = (mw) => FEATURE_CONTRAST - (FEATURE_CONTRAST - MOUTH_FEATURE_CONTRAST) * mw;
-  // 기본 격자
-  for (let y = 0; y < ih; y += step) {
-    for (let x = 0; x < iw; x += step) {
-      const x1 = Math.min(iw, x + step), y1 = Math.min(ih, y + step);
-      const cu = (x + x1) / (2 * iw), cv = (y + y1) / (2 * ih);
-      const fw = faceWeight(faceDist(cu, cv));
-      cell(x, y, x1, y1, fw > 0 && rnd() < fw, thrAt(fw > 0 ? mouthWeight(mouthDist(cu, cv)) : 0));
-    }
-  }
-  // 얼굴 격자 (필드 바운딩 박스 안만 순회)
-  const step2 = step / Math.sqrt(FACE_BOOST);
-  const accept = 1 - 1 / FACE_BOOST;
-  const reach = 1 + FACE_FADE;
-  const u0 = Math.max(0, FACE_OVAL.cu - FACE_OVAL.ru * reach), u1 = Math.min(1, FACE_OVAL.cu + FACE_OVAL.ru * reach);
-  const v0 = Math.max(0, FACE_OVAL.cv - FACE_OVAL.rv * reach), v1 = Math.min(1, FACE_OVAL.cv + FACE_OVAL.rv * reach);
-  for (let y = v0 * ih; y < v1 * ih; y += step2) {
-    for (let x = u0 * iw; x < u1 * iw; x += step2) {
-      const x1 = Math.min(iw, x + step2), y1 = Math.min(ih, y + step2);
-      const cu = (x + x1) / (2 * iw), cv = (y + y1) / (2 * ih);
-      const fw = faceWeight(faceDist(cu, cv));
-      if (fw <= 0 || rnd() >= fw * accept) continue;
-      cell(x, y, x1, y1, rnd() < fw, thrAt(mouthWeight(mouthDist(cu, cv))));
-    }
-  }
-  // 입 격자 (입 서브필드 바운딩 박스 안만 순회)
-  const step3 = step / Math.sqrt(MOUTH_BOOST);
-  const accept3 = 1 - FACE_BOOST / MOUTH_BOOST;
-  const reach3 = 1 + MOUTH_FADE;
-  const mu0 = Math.max(0, MOUTH.cu - MOUTH.ru * reach3), mu1 = Math.min(1, MOUTH.cu + MOUTH.ru * reach3);
-  const mv0 = Math.max(0, MOUTH.cv - MOUTH.rv * reach3), mv1 = Math.min(1, MOUTH.cv + MOUTH.rv * reach3);
-  for (let y = mv0 * ih; y < mv1 * ih; y += step3) {
-    for (let x = mu0 * iw; x < mu1 * iw; x += step3) {
-      const x1 = Math.min(iw, x + step3), y1 = Math.min(ih, y + step3);
-      const cu = (x + x1) / (2 * iw), cv = (y + y1) / (2 * ih);
-      const mw = mouthWeight(mouthDist(cu, cv));
-      if (mw <= 0 || rnd() >= mw * accept3) continue;
-      cell(x, y, x1, y1, true, thrAt(mw));
-    }
+  for (const c of cells) {
+    const p = Math.min(1, DENSITY_FLOOR + K * c.imp);
+    if (rnd() >= p) continue;
+    const cu = (c.x + c.x1) / (2 * iw), cv = (c.y + c.y1) / (2 * ih);
+    const mw = faceWeight(faceDist(cu, cv)) > 0 ? mouthWeight(mouthDist(cu, cv)) : 0;
+    cell(c.x, c.y, c.x1, c.y1, c.e >= FEATURE_EDGE, thrAt(mw), p * DENSITY_MAX);
   }
   return pts;
 }
@@ -316,10 +362,17 @@ function tagParticles() {
     const d = faceDist(p.u, p.v);             // 이미지 정규화 좌표 → 얼굴 타원 거리
     p.fw = faceWeight(d);                     // 렌더 가중치(타원 안 1 → 대역 밖 0)
     p.mw = p.fw > 0 ? mouthWeight(mouthDist(p.u, p.v)) : 0; // 입 서브필드 가중치(밝은 점 확대 억제)
+    p.dens = densMap ? (densMap.get(Math.round(p.v * imgH) * imgW + Math.round(p.u * imgW)) || 1) : 1;
+    p.dq = densBucket(p.dens);                // 렌더용 밀도 버킷
+    p.dn = Math.min(1.6, Math.max(0.4, 1 / DENS_BUCKETS[p.dq])); // 이동 중 안개 정규화 계수
     p.lf = 1; p.cq = -1;                      // 이동 계수 캐시·정지 스타일 캐시 키(무효)
     p.faceK = faceSpringScale(d);             // 상시 스프링 비율(얼굴 살짝 느림)
     if (p.delay === undefined) p.delay = gatherDelay(d, Math.random()) * scale;
     p.spring = SPRING * p.faceK * (gathering ? gatherSpring(gatherT, p.delay) : 1);
+  }
+  if (!densSorted) {                          // 밀도 버킷 정렬(그리기 순서만 바뀜 — 시뮬레이션과 무관)
+    ps.sort((a, b) => a.dq - b.dq);
+    densSorted = true;
   }
 }
 
@@ -419,12 +472,12 @@ function render() {
 
   // 패스 1 (additive): 헤일로 — sfumato 안개 글로우. 얼굴은 응집할수록 헤일로가 걷힌다.
   //   이동 중 입자는 dim만큼 어둡게 — 오프닝·산란의 연기가 눈부신 폭풍이 아니라 어스름한
-  //   안개에서 형상이 응결해 나오도록. 이동 중 얼굴 필드는 밀도가 FACE_BOOST배라 면적당
-  //   밝기도 그만큼 높다 → densNorm으로 나눠 몸과 같은 안개가 되게 한다(정지하면 1).
+  //   안개에서 형상이 응결해 나오도록. 이동 중 밀도가 높은 곳(밝은 얼굴·가슴)은 면적당 밝기도
+  //   그만큼 높다 → 상대 밀도 버킷의 1/dens(p.dn, 0.4~1.6)로 나눠 어디나 같은 안개가 되게 한다(정지하면 1).
   ctx.globalCompositeOperation = "lighter";
   for (const p of ps) {
     const lf = p.lf;
-    const densNorm = 1 - lf * (1 - 1 / (1 + (FACE_BOOST - 1) * p.fw));
+    const densNorm = 1 - lf * (1 - p.dn);
     const ha = 0.05 * (1 - p.fw * coh) * (1 - dim * lf) * densNorm;
     if (ha < 0.003) continue;
     const still = lf < STILL;
@@ -448,7 +501,7 @@ function render() {
   //   위를 덮으므로 (1 − fw·coh)로 연속 소멸시켜 그리지 않는다(비용).
   for (const p of ps) {
     const lf = p.lf;
-    const densNorm = 1 - lf * (1 - 1 / (1 + (FACE_BOOST - 1) * p.fw));
+    const densNorm = 1 - lf * (1 - p.dn);
     const a = 0.34 * (1 - dim * lf) * (1 - p.fw * coh) * densNorm;
     if (a < 0.01) continue;
     const still = lf < STILL;
