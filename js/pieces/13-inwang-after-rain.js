@@ -4,9 +4,15 @@
 // 반투명 안개 층 2~3겹이 자욱↔걷힘을 반복한다. 화면을 누르면 저해상 격자에서
 // 먹 농도 확산을 시뮬레이션해 업스케일·multiply 합성 — 화선지에 스미는 먹 번짐.
 // 드래그하면 커서 주변 안개 밀도가 줄고(밀어내기) 손을 떼면 서서히 회복한다.
+// 🎤 마이크가 켜져 있으면 지속음(숨·목소리)의 세기만큼 안개 세 띠가 함께 걷히고 조용해지면
+// 다시 차오르며, 박수·외침 같은 순간 스파이크에 먹 한 방울이 떨어진다(포인터가 화면 안이면
+// 그 자리, 아니면 원작 전경의 결정적 의사난수 위치). 마이크가 없거나 꺼져 있으면 기존 동작 그대로.
 //
 // 규약: dt·pointer만 사용. addEventListener/rAF/타이머/시계 API 없음.
+// 마이크는 opts.audio.mic getter를 tick 안에서 폴링만 한다(이벤트 없음).
 // document는 오프스크린 캔버스 생성에만 사용. 좌표는 CSS px.
+
+import { makeSoundState, soundStep } from "../sound-gesture.js";
 
 let ctx = null, W = 0, H = 0, T = 0, reduced = false;
 let img = null;                       // 원작 (없으면 null → 절차적 폴백)
@@ -34,6 +40,11 @@ let SPOT_R = 150;                     // 감소 반경(px)
 const RECOVER = 2.4;                  // 손 뗀 뒤 회복 시상수(초)
 let travel = 0;                       // 드래그 이동 누적(스팟 간격 제어)
 let pressMoved = false;               // 이번 누름이 드래그로 바뀌었는지(드래그면 먹 안 떨굼)
+
+// ---- 소리(마이크) ----
+// mic: opts.audio.mic getter(없으면 null) · snd: sound-gesture 상태 · sound: 이번 프레임 { energy, onset, strength }
+let mic = null, snd = makeSoundState(), sound = { energy: 0, onset: false, strength: 0 };
+const FOG_CLEAR = 0.7;                // energy 1일 때 안개 baseA 감소 비율(reducedMotion이면 절반)
 
 const PAPER = "#e9e0cb";              // 한지 여백 톤(따뜻한 아이보리)
 
@@ -160,6 +171,12 @@ function stampInk(sx, sy, peak, rCells) {
   }
 }
 
+// 결정적 의사난수(0..1) — T 같은 스칼라에서 자리를 뽑는다. Math.random 대신 써서 같은 입력엔 같은 자리
+function hash01(v) {
+  const s = Math.sin(v * 12.9898 + 78.233) * 43758.5453;
+  return s - Math.floor(s);
+}
+
 // 확산 + 증발 (무플럭스 경계). D는 프레임레이트 보정.
 function diffuseInk(cdt) {
   const D = Math.min(0.5, INK_D * Math.min(2, cdt * 60));
@@ -230,6 +247,8 @@ function clearanceMul(x, y) {
 
 function drawFog(cdt) {
   const flow = reduced ? 0.5 : 1;      // reducedMotion: 안개 흐름 속도 절반
+  // 소리: 지속음 세기만큼 세 띠가 함께 걷힌다(energy는 이미 평활). reducedMotion이면 진폭 절반. 무음이면 정확히 1
+  const soundMul = 1 - (reduced ? FOG_CLEAR * 0.5 : FOG_CLEAR) * sound.energy;
   const F = fit;
   const x0 = F.x - F.w * 0.15, x1 = F.x + F.w * 1.15, span = x1 - x0;
   const [fr, fg, fb] = FOG_WARM;
@@ -242,7 +261,7 @@ function drawFog(cdt) {
     const step = blobR * 0.55;
     const n = Math.ceil(span / step) + 2;
     const pulse = 0.55 + 0.45 * Math.sin(T * b.w * flow + b.phase);
-    const baseA = b.baseA * Math.max(0, pulse);
+    const baseA = b.baseA * Math.max(0, pulse) * soundMul;
     for (let k = 0; k < n; k++) {
       let bx = x0 + (((k * step + b.ox) % span) + span) % span;
       const by = b.yc + Math.sin(bx * 0.008 + T * 0.3 * flow + b.phase) * b.half * 0.35;
@@ -265,6 +284,8 @@ export default {
     ctx = opts.ctx; W = opts.width; H = opts.height;
     reduced = !!opts.reducedMotion; T = 0;
     img = opts.assets && opts.assets.target ? opts.assets.target : null;
+    mic = (opts.audio && opts.audio.mic) || null;
+    snd = makeSoundState(); sound = { energy: 0, onset: false, strength: 0 };
     A = makeCanvas(W, H); actx = A.getContext("2d");
     computeFit(); buildBase(); buildFog(); buildInk();
     SPOT_R = Math.min(W, H) * 0.16;
@@ -274,6 +295,9 @@ export default {
   tick(dt, ptr) {
     const cdt = Math.min(dt, 0.05);
     T += cdt;
+
+    // 소리 폴링: 마이크가 없거나 꺼져 있으면 0으로 스텝 → energy 자연 감쇠·onset 없음(기존 동작과 동일)
+    sound = soundStep(mic && mic.active() ? mic.level() : 0, cdt, snd);
 
     // 입력 분리: 탭=먹 방울(놓을 때), 누른 채 정지=계속 스밈, 움직이며 누름=안개 밀어내기
     if (ptr && ptr.inside) {
@@ -293,6 +317,19 @@ export default {
         stampInk(ptr.x, ptr.y, 2.6 * cdt, 2.2);
       }
       if (ptr.justUp && !pressMoved) stampInk(ptr.x, ptr.y, 1.25, 3.4); // 탭 = 먹 한 방울
+    }
+
+    // 박수·외침(스파이크) = 먹 한 방울, 크기는 스파이크 세기에 비례. 포인터가 화면 안이면 그 자리,
+    // 아니면 원작 전경(x 0.1~0.9 · y 0.5~0.9 — 수목·계곡)의 T 기반 결정적 의사난수 위치에 빗방울처럼 떨어진다.
+    // 소리용 스팟은 spots에 넣지 않는다(드래그 스팟 32캡 보호) — 안개 쪽 소리 반응은 drawFog의 soundMul이 맡는다
+    if (sound.onset) {
+      let sx, sy;
+      if (ptr && ptr.inside) { sx = ptr.x; sy = ptr.y; }
+      else {
+        sx = fit.x + fit.w * (0.1 + 0.8 * hash01(T));
+        sy = fit.y + fit.h * (0.5 + 0.4 * hash01(T + 17.3));
+      }
+      stampInk(sx, sy, 0.9 + 0.5 * sound.strength, 3 + 1.5 * sound.strength);
     }
 
     // 밀어낸 안개는 서서히 회복
@@ -323,6 +360,6 @@ export default {
   dispose() {
     ctx = null; actx = null; A = null; img = null;
     cur = null; nxt = null; inkC = null; ictx = null; inkImg = null;
-    bands = []; spots.length = 0;
+    bands = []; spots.length = 0; mic = null;
   },
 };
