@@ -117,6 +117,26 @@ export function skinness(r, g, b) {
   return warm * lit;
 }
 
+// 손 휘젓기 세기(펼침) 0.35..1: 셸의 펼침 판정 문턱(0.5)에서 살랑, 활짝(1)에서 마우스 드래그와 같은 세기.
+// 손 위치 지터로 잠시 펼침이 떨어져도 0.35 아래로는 내려가지 않는다(연속·클램프).
+export function handStir(openness) {
+  const o = Number.isFinite(openness) ? Math.min(1, Math.max(0, openness)) : 1;
+  return 0.35 + 0.65 * Math.min(1, Math.max(0, (o - 0.5) / 0.5));
+}
+
+// 손 이동 성분 0..1: 손 속도(px/s)가 HAND_SPEED_MIN 이하면 0(멈춤·지터), HAND_SPEED_FULL 이상이면 1. 선형.
+export const HAND_STILL = 0.15;        // 멈춘 펼친 손이 남기는 살랑(의사 컬) 세기 비율
+export const HAND_SPEED_MIN = 80;
+export const HAND_SPEED_FULL = 600;
+export function handMotion(speed) {
+  const v = Number.isFinite(speed) ? Math.max(0, speed) : 0;
+  return Math.min(1, Math.max(0, (v - HAND_SPEED_MIN) / (HAND_SPEED_FULL - HAND_SPEED_MIN)));
+}
+// 손 세기(속도) HAND_STILL..1 — 살랑 하한 + 이동 성분
+export function handSpeedGain(speed) {
+  return HAND_STILL + (1 - HAND_STILL) * handMotion(speed);
+}
+
 // 셀 중요도: 밝기(0..1)^BRIGHT_GAMMA + 명암폭(0..255)의 포화 항 + 얼굴 피부 항(0..1).
 export function importanceOf(bright, edge, face = 0) {
   return W_BRIGHT * Math.pow(bright, BRIGHT_GAMMA) + W_EDGE * Math.min(1, edge / EDGE_NORM) + W_FACE * face;
@@ -181,18 +201,35 @@ export default {
   tick(dt, ptr) {
     T += dt;
 
-    // 1) 입력 반영
+    // 1) 입력 반영 — 마우스와 카메라 손(셸이 handPointer 규약으로 합성: 펼친 손 = down,
+    //    주먹→펼침 = justDown)이 같은 경로를 탄다. 손 좌표가 비정상이면 그 프레임은 무시.
+    if (!(Number.isFinite(ptr.x) && Number.isFinite(ptr.y))) ptr = { ...ptr, inside: false };
+    const hand = ptr.hand && ptr.hand.visible;
     if (ptr.inside && ptr.justDown) {
       // 클릭 = 안개 폭발: 전체를 방사형으로 밀치고, 같은 안무로 재응집(얼굴이 마지막).
       // 연타는 산란만 누적하고 안무는 0.3초 안에 다시 시작하지 않는다(얼굴 스프링 무한 유예 방지).
       field.scatter(ptr.x, ptr.y, Math.min(W, H) * 0.95, reduced ? 130 : 260);
       if (!(gathering && gatherT < 0.3)) startGather();
     } else if (ptr.inside && ptr.down) {
-      // 드래그 = sfumato 휘젓기: 소용돌이 + 커서 주변 의사 컬 노이즈
-      const sp = Math.hypot(ptr.dx, ptr.dy);
+      const sp = Number.isFinite(ptr.dx) && Number.isFinite(ptr.dy) ? Math.hypot(ptr.dx, ptr.dy) : 0;
       const rad = Math.min(W, H) * 0.24;
-      field.swirl(ptr.x, ptr.y, rad, (reduced ? 70 : 150) + sp * 4);
-      stirCurl(ptr.x, ptr.y, rad, sp);
+      if (hand) {
+        // 손 = 손바람. 손은 보이는 동안 늘 "펼침(down)"이라 마우스의 소용돌이(swirl, 프레임마다 속도
+        //    누적)를 그대로 쓰면 멈춘 손도 몇 초 만에 거대한 고리를 만든다(E2E 확인). 대신 손 속도에
+        //    비례한 방사 밀림(지나간 자리의 안개가 밀려남)과 손 아래 안개의 살랑(의사 컬)만 준다.
+        //    멈춘 펼친 손은 살랑만 남아 그 자리 얼굴을 흐리고, 저으면 안개가 밀려난다. dt·60으로
+        //    프레임률에 무관하게, 펼침 정도(반쯤 0.35 → 활짝 1)로 세기를 조절.
+        const open = handStir(ptr.hand.openness);
+        const motion = handMotion(ptr.hand.speed);
+        const fps = Math.min(1.5, dt * 60);
+        const hrad = rad * 0.75;                 // 손바람 반경(마우스 소용돌이보다 좁게 — 지나간 자리만)
+        if (motion > 0) field.scatter(ptr.x, ptr.y, hrad, (reduced ? 35 : 80) * motion * open * fps);
+        stirCurl(ptr.x, ptr.y, hrad, sp * open, (HAND_STILL + (1 - HAND_STILL) * motion) * open * fps);
+      } else {
+        // 마우스 드래그 = sfumato 휘젓기: 소용돌이 + 커서 주변 의사 컬 노이즈 (기존 동작)
+        field.swirl(ptr.x, ptr.y, rad, (reduced ? 70 : 150) + sp * 4);
+        stirCurl(ptr.x, ptr.y, rad, sp);
+      }
     }
 
     // 2) 시뮬레이션 (유휴 숨쉬기 → 안무 스프링 → 적분)
@@ -406,11 +443,11 @@ function applyBreathing() {
   }
 }
 
-// ── 드래그 휘젓기: 사인 기반 의사 컬 노이즈로 vx,vy에 회전 성분 부여 ─
-function stirCurl(cx, cy, rad, sp) {
+// ── 드래그 휘젓기: 사인 기반 의사 컬 노이즈로 vx,vy에 회전 성분 부여 (scale: 손 경로의 세기 배율) ─
+function stirCurl(cx, cy, rad, sp, scale = 1) {
   const ps = field.particles;
   const r2 = rad * rad;
-  const force = (reduced ? 16 : 40) + sp * 1.4;
+  const force = ((reduced ? 16 : 40) + sp * 1.4) * scale;
   for (const p of ps) {
     const dx = p.x - cx, dy = p.y - cy, d2 = dx * dx + dy * dy;
     if (d2 > r2) continue;

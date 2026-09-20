@@ -125,6 +125,7 @@ python3 -m http.server 8090
 - In Great Wave (No. 01), press 📷 to control the sea by hand: an open palm dragged through the water swirls it; closing a fist and opening it again throws spray
 - In Tower of Babel (No. 10), press 📷 and raise one hand to build, or hold up both hands for a moment to collapse the tower
 - In The Tree of Life (No. 11), press 📷 and hold up a hand: new golden branches sprout toward wherever your hand lingers, and sweeping it sideways stirs the wind through the whole tree. The mouse keeps working as a fallback
+- In Mona Lisa (No. 04), press 📷 and sweep an open palm across the portrait to stir the sfumato haze; close a fist and open it again and the whole portrait scatters into smoke, the face returning last. The mouse does the same by drag and click
 - In Girl with a Pearl Earring (No. 03), press 📷 and your hand becomes the candle: sweep it to blow the light-dust away, and pinch thumb and index fingertips together to make the flame flicker in a wave of light. The mouse keeps working as a fallback
 - In Simultaneous Faces (No. 12), press 📷 and wave your hand from side to side: the cubist portrait scatters and reassembles into an entirely new face. Move your hand slowly to push the facets and twist the viewpoints. The mouse keeps working as a fallback
 
@@ -283,6 +284,7 @@ python3 -m http.server 8090
 - 01번 가나가와 파도에서 📷를 누르면 손으로 바다를 다룹니다. 펼친 손을 움직이면 소용돌이, 주먹을 쥐었다 펼치면 물보라
 - 10번 바벨탑에서 📷를 누르고 한 손을 들면 탑이 쌓이고, 두 손을 잠시 들고 있으면 무너집니다
 - 11번 생명의 나무에서 📷를 누르고 손을 들면 손이 머무는 자리로 금빛 가지가 돋아 자라고, 좌우로 휘두르면 나무 전체에 바람이 입니다. 마우스로도 그대로 가능합니다
+- 04번 모나리자에서 📷를 누르고 펼친 손을 초상 위로 움직이면 스푸마토 안개가 휘저어지고, 주먹을 쥐었다 펼치면 초상 전체가 연무로 흩어진 뒤 얼굴이 마지막에 돌아옵니다. 마우스는 드래그와 클릭으로 같습니다
 - 03번 진주 귀걸이를 한 소녀에서 📷를 누르면 손이 촛불이 됩니다. 손을 휙 저으면 빛 먼지가 흩날리고, 엄지와 검지 끝을 맞대면 촛불이 깜빡이며 빛의 파동이 퍼집니다. 마우스로도 그대로 가능합니다
 - 12번 동시의 얼굴에서 📷를 누르고 손을 좌우로 크게 흔들면 큐비즘 초상이 흩어졌다 전혀 새로운 얼굴로 재조립됩니다. 손을 천천히 움직이면 면들이 밀리며 시점이 비틀립니다. 마우스로도 그대로 가능합니다
 

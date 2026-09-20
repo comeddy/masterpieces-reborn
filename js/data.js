@@ -34,8 +34,9 @@ export const WORKS = [
   {
     no: "04", wing: "wave", title: "After Leonardo — Mona Lisa", ko: "모나리자",
     medium: "Sfumato smoke particles · after Leonardo (c.1503, public domain)", year: "2026",
-    note: "레오나르도의 스푸마토 — '연기처럼 사라지는' 기법 그대로, 모나리자가 안개 입자로 흩어지고 응결된다. 휘저으면 초상은 갈색 연무가 되고, 안개가 걷히며 얼굴이 돌아올 때 그 얼굴은 언제나 가장 늦게 떠오른다.",
-    hint: "드래그로 안개를 휘저으세요 · 클릭으로 흩뜨리기 · 얼굴을 기다리세요",
+    note: "레오나르도의 스푸마토 — '연기처럼 사라지는' 기법 그대로, 모나리자가 안개 입자로 흩어지고 응결된다. 휘저으면 초상은 갈색 연무가 되고, 안개가 걷히며 얼굴이 돌아올 때 그 얼굴은 언제나 가장 늦게 떠오른다. 카메라 앞에서 펼친 손을 움직이면 그 손이 안개를 휘젓고, 주먹을 쥐었다 펼치면 초상이 연무로 흩어진다.",
+    hint: "📷를 켜고 손을 펼쳐 안개를 휘저으세요 · 주먹을 쥐었다 펼치면 흩어집니다 · 얼굴을 기다리세요 · 마우스는 드래그로 휘젓고 클릭으로 흩뜨리기",
+    cam: true, handPointer: true, camHands: 1,
     module: "./pieces/04-mona-lisa.js", asset: "assets/targets/04-mona-lisa.jpg",
   },
 

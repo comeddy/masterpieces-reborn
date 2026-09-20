@@ -244,3 +244,40 @@ test("skinness: 피부빛(따뜻·밝음)은 1에 가깝고 하늘(청록)·머�
   assert.equal(skinness(58, 40, 28), 0, "어두운 머리카락");
   assert.equal(skinness(48, 35, 25), 0, "드레스");
 });
+
+// ── 카메라 손짓: 셸 합성 포인터 방식 ──────────────────────────────────
+import { WORKS } from "../js/data.js";
+import { handStir, handSpeedGain, handMotion, HAND_STILL, HAND_SPEED_MIN, HAND_SPEED_FULL } from "../js/pieces/04-mona-lisa.js";
+
+test("04번은 카메라 손 합성 포인터 작품이다 (cam·handPointer·camHands 1) — 힌트에 📷와 마우스 대응 명시", () => {
+  const w = WORKS.find((x) => x.no === "04");
+  assert.equal(w.cam, true); assert.equal(w.handPointer, true); assert.equal(w.camHands, 1);
+  assert.ok(w.hint.includes("📷") && w.hint.includes("마우스"), w.hint);
+  assert.ok(w.note.includes("카메라"), "note에 카메라 문장");
+});
+
+test("handStir: 펼침 문턱(0.5) 이하 0.35, 활짝(1) 1, 사이 단조 증가, 비정상 입력은 1", () => {
+  assert.ok(Math.abs(handStir(0.5) - 0.35) < 1e-12);
+  assert.ok(Math.abs(handStir(0) - 0.35) < 1e-12);
+  assert.equal(handStir(1), 1);
+  assert.ok(handStir(0.75) > handStir(0.6) && handStir(0.6) > handStir(0.5));
+  assert.equal(handStir(NaN), 1); assert.equal(handStir(undefined), 1);
+});
+
+test("handSpeedGain: 멈춘 손 HAND_STILL, 빠른 손 1, 사이 단조, 비정상 입력은 멈춤으로", () => {
+  assert.ok(Math.abs(handSpeedGain(0) - HAND_STILL) < 1e-12);
+  assert.ok(Math.abs(handSpeedGain(HAND_SPEED_MIN) - HAND_STILL) < 1e-12);
+  assert.equal(handSpeedGain(HAND_SPEED_FULL), 1); assert.equal(handSpeedGain(5000), 1);
+  const mid = handSpeedGain((HAND_SPEED_MIN + HAND_SPEED_FULL) / 2);
+  assert.ok(mid > HAND_STILL && mid < 1);
+  assert.ok(Math.abs(handSpeedGain(NaN) - HAND_STILL) < 1e-12);
+});
+
+test("handMotion: 지터(≤MIN)는 0, FULL 이상 1, 사이 선형·단조, 비정상 입력 0", () => {
+  assert.equal(handMotion(0), 0); assert.equal(handMotion(HAND_SPEED_MIN), 0);
+  assert.equal(handMotion(HAND_SPEED_FULL), 1); assert.equal(handMotion(9999), 1);
+  const a = handMotion(200), b = handMotion(400);
+  assert.ok(a > 0 && b > a && b < 1);
+  assert.equal(handMotion(NaN), 0);
+  assert.ok(Math.abs(handSpeedGain(300) - (HAND_STILL + (1 - HAND_STILL) * handMotion(300))) < 1e-12);
+});
