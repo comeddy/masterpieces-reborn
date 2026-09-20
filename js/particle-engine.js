@@ -50,13 +50,14 @@ export class ParticleField {
   // image 또는 points({u,v,r,g,b}[]) 중 하나 필수. points 사용 시 aspect(가상 박스 w/h) 지정
   constructor({ image = null, points = null, aspect = 0.75, count = 6000,
                 w, h, margin = 0.08, spring = 22, damping = 7, jitter = 6,
-                sizeMin = 1, sizeMax = 2.2 } = {}) {
+                sizeMin = 1, sizeMax = 2.2, areaPerDot = 110 } = {}) {
     this.spring = spring;
     this.damping = damping;
     this.jitter = jitter;
     this.margin = margin;
-    // 화면 크기에 따라 입자 수 자동 감축 (모바일 보호)
-    const cap = Math.max(400, Math.min(count, Math.floor((w * h) / 110)));
+    // 화면 크기에 따라 입자 수 자동 감축 (모바일 보호). areaPerDot = 캔버스 전체 면적을 나눠 최대 입자 수를
+    // 정하는 면적 예산(px²/점) — 기본 110. 값을 낮추면 캡이 올라간다(프레임 비용은 비례해 증가).
+    const cap = Math.max(400, Math.min(count, Math.floor((w * h) / areaPerDot)));
     let pts;
     if (image) {
       this.aspect = (image.naturalWidth || image.width) / (image.naturalHeight || image.height);

@@ -121,7 +121,7 @@ test("응집 안무: 바깥 입자가 먼저 도착하고 얼굴 입자가 마�
 });
 
 // ── 순수 샘플러: 밀도 필드·특징 보존·중복 없음 ────────────────────────
-import { DENSITY_MAX, DENSITY_FLOOR, DENSITY_TOTAL, EDGE_NORM, W_BRIGHT, W_EDGE, FEATURE_EDGE, DENS_BUCKETS, densBucket, skinness,
+import { DENSITY_MODE, UNIFORM_COUNT, AREA_PER_DOT, DENSITY_MAX, DENSITY_FLOOR, DENSITY_TOTAL, EDGE_NORM, W_BRIGHT, W_EDGE, FEATURE_EDGE, DENS_BUCKETS, densBucket, skinness,
   importanceOf, solveK, samplePixels } from "../js/pieces/04-mona-lisa.js";
 
 // 결정적 의사난수 (LCG) — 테스트 재현성
@@ -140,7 +140,7 @@ function makeImage(iw, ih, paint) {
 
 test("samplePixels: 피부빛이 아닌 균일 이미지에서는 얼굴 안팎 밀도가 같다(기하만으로는 올리지 않음), 총량은 count·DENSITY_TOTAL", () => {
   const iw = 480, ih = 716, count = 6000;
-  const pts = samplePixels(makeImage(iw, ih, () => [150, 162, 156]), iw, ih, count, lcg(1)); // 청록 회색(skinness 0)
+  const pts = samplePixels(makeImage(iw, ih, () => [150, 162, 156]), iw, ih, count, lcg(1), "content"); // 청록 회색(skinness 0)
   let inCore = 0, inBottom = 0, aCore = 0, aBottom = 0;
   for (let y = 0; y < ih; y += 2) for (let x = 0; x < iw; x += 2) {
     const u = (x + 0.5) / iw, v = (y + 0.5) / ih;
@@ -155,7 +155,7 @@ test("samplePixels: 피부빛이 아닌 균일 이미지에서는 얼굴 안팎 
 
 test("samplePixels: 피부빛 균일 이미지에서는 얼굴 타원 안만 촘촘하고, 타원 바깥 고리는 기본 밀도(고리 없음)", () => {
   const iw = 480, ih = 716, count = 6000;
-  const pts = samplePixels(makeImage(iw, ih), iw, ih, count, lcg(3)); // 기본색 (180,160,130) = 피부빛
+  const pts = samplePixels(makeImage(iw, ih), iw, ih, count, lcg(3), "content"); // 기본색 (180,160,130) = 피부빛
   const ring = (a, b) => { let n = 0; for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) { const d = faceDist((x + 0.5) / iw, (y + 0.5) / ih); if (d >= a && d < b) n++; } return n; };
   const cnt = (a, b) => pts.filter((q) => { const d = faceDist(q.u, q.v); return d >= a && d < b; }).length;
   const dIn = cnt(0, 0.9) / ring(0, 0.9), dOut = cnt(1 + FACE_FADE + 0.1, 1 + FACE_FADE + 0.6) / ring(1 + FACE_FADE + 0.1, 1 + FACE_FADE + 0.6);
@@ -167,7 +167,7 @@ test("samplePixels: 피부빛 균일 이미지에서는 얼굴 타원 안만 촘
 test("samplePixels: 밀도는 밝기를 따른다 — 밝은 반쪽이 어두운 반쪽보다 촘촘, 어두운 쪽도 하한 유지", () => {
   const iw = 480, ih = 716, count = 6000;
   const data = makeImage(iw, ih, (x, y) => (y < ih / 2 ? [220, 200, 170] : [40, 32, 26]));
-  const pts = samplePixels(data, iw, ih, count, lcg(2));
+  const pts = samplePixels(data, iw, ih, count, lcg(2), "content");
   // 경계선(y=ih/2) 주변 ±8px 은 경계 항이 끼므로 제외
   const top = pts.filter((q) => q.v * ih < ih / 2 - 8).length, bot = pts.filter((q) => q.v * ih > ih / 2 + 8).length;
   const base = count / (iw * ih) * (iw * (ih / 2 - 8));   // 반쪽 면적의 기본 격자 점 수
@@ -199,7 +199,7 @@ test("samplePixels: 얼굴 안 가느다란 어두운 선(입술선)이 점으�
   // 얼굴 중심을 가로지르는 3px 두께의 어두운 선 (v = cv, u ∈ cu±0.06)
   const yLine = Math.round(FACE_OVAL.cv * ih), xa = Math.round((FACE_OVAL.cu - 0.06) * iw), xb = Math.round((FACE_OVAL.cu + 0.06) * iw);
   const data = makeImage(iw, ih, (x, y) => (Math.abs(y - yLine) <= 1 && x >= xa && x <= xb) ? [40, 30, 25] : null);
-  const pts = samplePixels(data, iw, ih, count, lcg(3));
+  const pts = samplePixels(data, iw, ih, count, lcg(3), "content");
   const fstep = Math.sqrt((iw * ih) / count) / Math.sqrt(DENSITY_MAX); // 미세 격자 ≈4.5px → 선을 가로지르는 셀 ≈ (xb-xa)/fstep
   const onLine = pts.filter((q) => Math.abs(q.v * ih - yLine) <= 1.5 && q.u * iw >= xa - 1 && q.u * iw <= xb + 1);
   const expectCells = (xb - xa) / fstep;
@@ -281,3 +281,43 @@ test("handMotion: 지터(≤MIN)는 0, FULL 이상 1, 사이 선형·단조, 비
   assert.equal(handMotion(NaN), 0);
   assert.ok(Math.abs(handSpeedGain(300) - (HAND_STILL + (1 - HAND_STILL) * handMotion(300))) < 1e-12);
 });
+
+// ── 균일 모드(기본): 전 영역 같은 밀도, 피부색·얼굴 위치와 무관 ─────────────────────
+test("uniform 모드(기본)가 켜져 있고, 균일 총량·캡 상수가 1600×900 캡 안에 든다", () => {
+  assert.equal(DENSITY_MODE, "uniform");
+  assert.ok(UNIFORM_COUNT <= Math.floor(1600 * 900 / AREA_PER_DOT), "총량이 1600×900 캡을 넘으면 잘린다");
+});
+
+test("samplePixels(uniform): 피부빛 균일 이미지에서도 얼굴 안팎 밀도가 같고 총량은 count, dens는 전부 1", () => {
+  const iw = 480, ih = 716, count = 6000;
+  const pts = samplePixels(makeImage(iw, ih), iw, ih, count, lcg(11));
+  let inCore = 0, inBottom = 0, aCore = 0, aBottom = 0;
+  for (let y = 0; y < ih; y += 2) for (let x = 0; x < iw; x += 2) {
+    const u = (x + 0.5) / iw, v = (y + 0.5) / ih;
+    if (faceDist(u, v) < 0.9) aCore += 4; else if (v > 0.7) aBottom += 4;
+  }
+  for (const q of pts) { if (faceDist(q.u, q.v) < 0.9) inCore++; else if (q.v > 0.7) inBottom++; }
+  const ratio = (inCore / aCore) / (inBottom / aBottom);
+  assert.ok(Math.abs(ratio - 1) < 0.1, `얼굴/바깥 밀도 비 ${ratio.toFixed(2)} ≠ 1`);
+  assert.ok(Math.abs(pts.length / count - 1) < 0.05, `총량 ${pts.length} ≠ ${count}`);
+  assert.ok(pts.every((q) => q.dens === 1));
+});
+
+test("samplePixels(uniform): 밝은 반쪽과 어두운 반쪽의 밀도가 같다 (내용과 무관)", () => {
+  const iw = 480, ih = 716, count = 6000;
+  const data = makeImage(iw, ih, (x, y) => (y < ih / 2 ? [220, 200, 170] : [40, 32, 26]));
+  const pts = samplePixels(data, iw, ih, count, lcg(12));
+  const top = pts.filter((q) => q.v * ih < ih / 2 - 8).length, bot = pts.filter((q) => q.v * ih > ih / 2 + 8).length;
+  assert.ok(Math.abs(top / bot - 1) < 0.1, `밝은/어두운 밀도 비 ${(top / bot).toFixed(2)} ≠ 1`);
+});
+
+test("samplePixels(uniform): 얼굴 안 어두운 선은 특징 스냅으로 살아남는다", () => {
+  const iw = 480, ih = 716, count = 6000;
+  const yLine = Math.round(FACE_OVAL.cv * ih), xa = Math.round((FACE_OVAL.cu - 0.06) * iw), xb = Math.round((FACE_OVAL.cu + 0.06) * iw);
+  const data = makeImage(iw, ih, (x, y) => (Math.abs(y - yLine) <= 1 && x >= xa && x <= xb) ? [40, 30, 25] : null);
+  const pts = samplePixels(data, iw, ih, count, lcg(13));
+  const step = Math.sqrt((iw * ih) / count);
+  const onLine = pts.filter((q) => Math.abs(q.v * ih - yLine) <= 1.5 && q.u * iw >= xa - 1 && q.u * iw <= xb + 1);
+  assert.ok(onLine.length >= ((xb - xa) / step) * 0.7, `선 위 점 ${onLine.length} < 셀 수의 70%`);
+});
+

@@ -48,3 +48,14 @@ test("ParticleField(points 모드): 생성·스텝·산란·리사이즈가 동�
     assert.ok(p.tx >= 0 && p.tx <= 400 && p.ty >= 0 && p.ty <= 400);
   }
 });
+
+test("ParticleField: areaPerDot 로 화면 면적 캡을 조절한다 (기본 110)", () => {
+  const points = Array.from({ length: 6000 }, (_, i) => ({ u: (i % 100) / 100, v: Math.floor(i / 100) / 60, r: 200, g: 100, b: 50 }));
+  const base = new ParticleField({ points, aspect: 1, count: 6000, w: 800, h: 600 });        // 캡 800*600/110 = 4363
+  const dense = new ParticleField({ points, aspect: 1, count: 6000, w: 800, h: 600, areaPerDot: 80 }); // 캡 6000
+  assert.equal(base.particles.length, Math.floor(800 * 600 / 110));
+  assert.equal(dense.particles.length, 6000);
+  const tiny = new ParticleField({ points, aspect: 1, count: 6000, w: 100, h: 100, areaPerDot: 80 }); // 하한 400
+  assert.equal(tiny.particles.length, 400);
+});
+

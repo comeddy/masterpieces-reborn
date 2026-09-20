@@ -1,12 +1,11 @@
 // js/pieces/04-mona-lisa.js
 // After Leonardo — Mona Lisa (c.1503) · 점묘 안개 초상
-// 점(입자)만으로 얼굴을 해상한다: 점 밀도는 원작의 빛을 따른다 — 어두운 바탕의 점묘는
-// 빛을 찍는 것이라 밝은 곳(얼굴·가슴)이 촘촘하고 어두운 곳(드레스·머리카락)은 성기며,
-// 굵은 명암 경계(눈·입술선·손가락 윤곽·소매 주름)가 조금 더 촘촘하다. 얼굴은 기하만으로
-// 특별 취급하지 않고 피부빛으로 걸러진 부드러운 필드로만 올리므로 머리 주변에 밀도 고리가 생기지 않는다. 경계가 지나는 셀은 가장
-// 어두운 픽셀에 점을 스냅해(특징 보존 샘플) 입술선·눈꺼풀이 격자에 묻히지 않게 하고,
-// 응집 시 얼굴 점의 명도 대비를 넓히고 밝은 점을 조금 키워 눈·코·입(미소)이 점묘처럼
-// 읽히게 한다. 흩어지면 sfumato 연기.
+// 점(입자)만으로 얼굴을 해상한다. 점 밀도는 전 영역 균일하다(DENSITY_MODE "uniform", 사용자 결정:
+// 얼굴 주변만 촘촘한 것을 원치 않음). 대신 전체 밀도를 올린다 — 총 18,000점, 엔진 캡 80px²/점.
+// 얼굴 필드 셀은(가중치 확률로) 셀 안 가장 어두운 픽셀에 점을 스냅해(특징 보존 샘플 — 임계 FEATURE_CONTRAST,
+// 입 서브필드 MOUTH_FEATURE_CONTRAST) 입술선·눈꺼풀이 격자에 묻히지 않게 하고, 응집 시 얼굴 점의 명도 대비를 넓히고 밝은 점을 조금 키워 눈·코·입(미소)이 점묘처럼
+// 읽히게 한다. 흩어지면 sfumato 연기. ("content" 모드 — 밝기·경계·피부빛 기반 밀도 — 는 보존되어
+// 상수 하나로 되돌릴 수 있다.)
 //
 // 오프닝·재응집 안무: 입자마다 얼굴 중심에서의 거리로 정해지는 지연 뒤에 스프링이
 // 살아난다 — 배경·몸이 먼저 응결하고 얼굴이 마지막에 파면처럼 떠오른다. 지연·
@@ -23,7 +22,12 @@ const MONO = [116, 98, 76];   // 안개 상태의 갈색-회갈색 모노톤
 // 정의된다: d=0 중심, d=1 타원 경계.
 export const FACE_OVAL = { cu: 0.45, cv: 0.225, ru: 0.145, rv: 0.135 };
 export const FACE_FADE = 0.6;        // 렌더 가중치 감쇠 대역: d 1.0 → 1.6 에서 1 → 0
-// 점 밀도 결정(내용 기반): 미세 격자 셀마다 중요도
+// 밀도 모드. "uniform": 균일 격자(총 UNIFORM_COUNT, 캡 AREA_PER_DOT) · "content": 아래 내용 기반 중요도 샘플링.
+export const DENSITY_MODE = "uniform";
+export const UNIFORM_COUNT = 18000;      // 균일 모드 총 점 수 (reduced 11,000) — 1600×900 캡 18,000 안
+export const UNIFORM_COUNT_REDUCED = 11000;
+export const AREA_PER_DOT = 80;          // 균일 모드 엔진 캡: 화면 px²/점 (기본 110 → 1600×900에서 13,090 → 18,000)
+// 점 밀도 결정(내용 기반, "content" 모드): 미세 격자 셀마다 중요도
 //   imp = W_BRIGHT·밝기^BRIGHT_GAMMA + W_EDGE·min(1, 명암폭/EDGE_NORM) + W_FACE·faceWeight·skinness,
 // 채택 확률 p = min(1, DENSITY_FLOOR + K·imp). 미세 격자 간격은 step/√DENSITY_MAX 라 p=1 이면 기본
 // 밀도의 DENSITY_MAX 배, p=DENSITY_FLOOR 이면 그 DENSITY_FLOOR 배(하한 — 어두운 드레스도 실루엣 유지).
@@ -191,6 +195,7 @@ export default {
       w: W, h: H, margin: 0.1,
       spring: SPRING, damping: DAMPING, jitter: 2.5,
       sizeMin: 1.1, sizeMax: 2.2,
+      areaPerDot: DENSITY_MODE === "uniform" ? AREA_PER_DOT : 110,
     });
 
     buildBackground();
@@ -258,13 +263,13 @@ function buildPoints(img) {
   if (!img) { densMap = null; return { points: makePortraitPoints(), aspect: 0.75 }; } // 폴백: 절차적 실루엣
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
-  // 기본 count(균일 격자였을 때의 점 수). 실제 총량은 DENSITY_TOTAL 배(일반 ≈14,400).
-  const total = reduced ? 7400 : 12000;
+  // uniform: 총 UNIFORM_COUNT 를 그대로 균일 격자로. content: 기본 count 12,000(총량은 DENSITY_TOTAL 배 ≈14,400).
+  const total = DENSITY_MODE === "uniform" ? (reduced ? UNIFORM_COUNT_REDUCED : UNIFORM_COUNT) : (reduced ? 7400 : 12000);
   const points = samplePortrait(img, total);
   imgW = iw; imgH = ih;
   densMap = new Map();
   for (const q of points) densMap.set(Math.round(q.v * ih) * iw + Math.round(q.u * iw), q.dens);
-  shuffle(points); // 화면 면적 캡(w*h/110)이 밝은 곳·어두운 곳을 같은 비율로 자르도록
+  shuffle(points); // 화면 면적 캡(w*h/areaPerDot, uniform 80)이 전 영역을 같은 비율로 자르도록
   return { points, aspect: iw / ih };
 }
 
@@ -292,7 +297,7 @@ function samplePortrait(image, count) {
 // · dens = p·DENSITY_MAX: 그 자리의 상대 밀도(기본 격자 1 기준). 렌더가 이동 중 안개 밝기를 이 값으로
 //   나눠 밀도가 높은 곳이 홀로 밝은 덩어리로 뜨지 않게 한다.
 // · 같은 픽셀은 한 번만 넣는다.
-export function samplePixels(data, iw, ih, count, rnd) {
+export function samplePixels(data, iw, ih, count, rnd, mode = DENSITY_MODE) {
   const step = Math.max(1, Math.sqrt((iw * ih) / count));
   const fstep = step / Math.sqrt(DENSITY_MAX);
   const stride = fstep >= 4 ? 2 : 1;                // 중요도 추정용 픽셀 보폭(비용 1/4)
@@ -341,6 +346,20 @@ export function samplePixels(data, iw, ih, count, rnd) {
       push(xi, yi, data[i], data[i + 1], data[i + 2], dens);
     }
   };
+  // 균일 모드: 기본 격자 한 벌 — 셀마다 점 하나(count 개), 얼굴 필드 셀은 특징 스냅 시도, dens 1
+  const thrAt = (mw) => FEATURE_CONTRAST - (FEATURE_CONTRAST - MOUTH_FEATURE_CONTRAST) * mw;
+  if (mode === "uniform") {
+    for (let y = 0; y < ih; y += step) {
+      for (let x = 0; x < iw; x += step) {
+        const x1 = Math.min(iw, x + step), y1 = Math.min(ih, y + step);
+        const cu = (x + x1) / (2 * iw), cv = (y + y1) / (2 * ih);
+        const fw = faceWeight(faceDist(cu, cv));
+        cell(x, y, x1, y1, fw > 0 && rnd() < fw, thrAt(fw > 0 ? mouthWeight(mouthDist(cu, cv)) : 0), 1);
+      }
+    }
+    return pts;
+  }
+  // ── content 모드 ──
   // 1) 미세 격자 훑기 → 셀 중요도
   const cells = [];
   for (let y = 0; y < ih; y += fstep) {
@@ -365,7 +384,6 @@ export function samplePixels(data, iw, ih, count, rnd) {
   // 2) 총량을 맞추는 K
   const K = solveK(cells.map((c) => c.imp), count * DENSITY_TOTAL);
   // 3) 채택·샘플 (특징 임계는 입 서브필드에서 낮아진다)
-  const thrAt = (mw) => FEATURE_CONTRAST - (FEATURE_CONTRAST - MOUTH_FEATURE_CONTRAST) * mw;
   for (const c of cells) {
     const p = Math.min(1, DENSITY_FLOOR + K * c.imp);
     if (rnd() >= p) continue;
