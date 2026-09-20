@@ -78,7 +78,7 @@ let mic = null, snd = makeSoundState(), sound = { energy: 0, onset: false, stren
 - **08 비·증기·속도**: `energy` → 굴뚝(trainPose(trainT).stackX/Y)에서 초당 `4 + 12·energy`개의 작은 증기(puff) 지속 방출(누적 카운터), 기차 위치를 앵커로 한 방사형 안개 밀어내기 `breath`(stir와 별도 변수, 반경 W·0.35, 세기 ∝ energy), 빗줄기 속도·알파 ×(1 + 0.3·energy). `onset` → 기존 `whistle()`. **whistle에 0.6s 쿨다운 추가**(클릭 연타에도 적용), `puffs` 상한 200(초과 시 오래된 것 제거).
 - **13 인왕제색도**: `energy` → 안개 3밴드 `baseA` 승수 `1 − 0.7·energy`(energy는 이미 평활). `onset` → `stampInk` 먹 방울 1개(peak 0.9 + 0.5·strength, r 3 + 1.5·strength) — 앵커: `ptr.inside`면 포인터 위치, 아니면 fit 사각형 안 전경(y 0.5~0.9)에서 의사난수 위치(`T` 기반 결정적). 소리용 스팟은 `spots` 배열에 넣지 않는다(드래그 스팟 32캡 보호).
 - **14 씨름**: `energy` → 구경꾼(엿장수 제외) `f.exc = max(f.exc, 1.2·energy)`(덧셈 금지 — 포화 방지), 씨름꾼 유휴 rock/bob 진폭 ×(1 + 0.6·energy). `onset` → `tech < 0`(진행 중 아님)일 때만 `tech = 0` + `waves.push` 중심 = 씨름꾼 피벗(puppet pivot). waves 6캡 유지.
-- **15 월하정인**: `wind = energy` → 구름 목표를 `lerp(포인터(또는 현재 위치), MOON, wind)`로 단일 목표(tx,ty)로 합산해 한 번만 lerp(포인터 추종 코드와 통합), 소리로 움직일 때 `seeded = true`, `cloudR`·churn ×(1 + 0.4·wind). `onset` → `lanternPulse = 0.5`(기존 클릭 효과), 헬퍼 쿨다운으로 연발 억제.
+- **15 월하정인**: `wind = energy` → 구름 목표를 `lerp(기본 목표, MOON, wind)`로 단일 목표(tx,ty)로 합산해 한 번만 lerp(포인터 추종 코드와 통합). 기본 목표 = 커서 안이면 커서, 밖이면 소리로 움직인 뒤(`soundMoved`)라면 초기 위치(W·0.5, H·0.86 — 소리가 멎으면 구름이 물러나 달빛 회복), 아니면 현재 위치(마우스 기존 동작 유지). 소리로 움직일 때 `seeded = true`, `cloudR`·churn ×(1 + 0.4·wind). `onset` → `lanternPulse = 0.5`(기존 클릭 효과), 헬퍼 쿨다운으로 연발 억제.
 
 ## 📷 4작품(코드 무변경) 확인 사항
 - 05: 펼친 손 정지 시 EMA 미세 진동으로 약한 리플이 드물게 생길 수 있음 — 허용(20px 문턱).
