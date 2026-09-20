@@ -3,7 +3,7 @@
 // 입자가 원작(또는 절차적 조개껍질+여신 실루엣)으로 응집하고,
 // 드래그=방향성 바람, 클릭=돌풍, 유휴=수평 바람 사인파 + 장미 꽃잎으로 반응한다.
 // 카메라(📷): 셸(main.js)이 손을 포인터 규약으로 합성한다(펼친 손=드래그, 주먹→펼침=클릭).
-// 이 모듈은 손 인식 코드를 갖지 않고 ptr.hand(visible·openness·speed)만 읽어 원작의
+// 이 모듈은 손 인식 코드를 갖지 않고 ptr.hand(visible·speed)만 읽어 원작의
 // 서풍 제피로스 감각을 더한다 — 넓은 바람 반경, 펼친 손 아래 잔잔한 숨결, 빠른 손길 뒤 장미 꽃잎.
 import { ParticleField } from "../particle-engine.js";
 
@@ -62,7 +62,7 @@ export function breathParams(ptr, reduced) {
 // 저모션 1장)을 손 위치에서 진행 방향으로 날린다. state.cool은 호출자가 보관·전달한다.
 // 반환 null = 이번 프레임 방출 없음. handCount(살아 있는 손 꽃잎 수)가 petalMax 이상이면 방출하지 않는다.
 // speed(px/s)를 주면 ptr.hand.speed 대신 쓴다 — 셸의 speed는 dt 상한(0.05s)으로 나눈 값이라 20fps 미만에서
-// 실제의 최대 2배(5fps에선 4배)로 부풀므로, tick은 realDt로 재계산한 값을 넘긴다.
+// 실제보다 부푼다(10fps 2배·5fps 4배, 셸의 realDt 캡 0.25s로 최대 5배). tick은 realDt로 재계산한 값을 넘긴다.
 export function petalEmit(state, ptr, dt, reduced, handCount, speed) {
   state.cool = Math.max(0, state.cool - dt);
   if (!isHand(ptr) || !ptr.down) return null;

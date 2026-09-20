@@ -36,7 +36,7 @@ The entire site — curation, specification, 16 artwork modules, tests, quality 
 
 - **16 interactive works across 4 wings** — particle fluids, chiaroscuro lantern reveals, ink-wash diffusion, living crowds, moonlight narratives, scroll-journey parallax, paper-puppet theatre, and a generative cubist portrait that reassembles on every click
 - **Zero-build architecture** — vanilla ES modules and Canvas 2D only; no frameworks, no bundler; deploying is a single `aws s3 sync`
-- **Hand-gesture works** — pressing the 📷 button in a work loads MediaPipe Hand Landmarker on demand (pinned CDN version) and, for works that opt in, the shell synthesizes the hand into the pointer contract: in Great Wave an open palm stirs the sea and a fist-to-open flick throws spray, and in Birth of Venus the same open palm becomes the west wind that scatters the sea-foam and rose petals. Nothing external is downloaded until the button is pressed; the mouse keeps working as a fallback. Camera video is processed locally in the browser and is never uploaded or stored
+- **Hand-gesture works** — pressing the 📷 button in a work loads MediaPipe Hand Landmarker on demand (pinned CDN version) and, for works that opt in, the shell synthesizes the hand into the pointer contract: in Great Wave an open palm stirs the sea and a fist-to-open flick throws spray, and in Birth of Venus the same open palm becomes the west wind that scatters the sea-foam and leaves rose petals in its wake. Nothing external is downloaded until the button is pressed; the mouse keeps working as a fallback. Camera video is processed locally in the browser and is never uploaded or stored
 - **Shared particle engine** — a reusable gather/scatter/restore engine (`js/particle-engine.js`) drives the Wave Hall: pixels sampled from the original painting become spring-driven particles that scatter under the pointer and return to the immortal image
 - **Data-driven shell** — `js/data.js` is the single source of truth; the atrium, cards, viewer, and navigation render automatically from 16 metadata entries
 - **Piece module contract** — every artwork is one ES module exporting `{init, tick, resize, dispose}`; the shell owns the rAF loop and pointer state, so pieces stay pure and leak-free
@@ -123,7 +123,7 @@ python3 -m http.server 8090
 - Press Escape to return to the atrium, and the arrow keys to move between works
 - The sound toggle (top right of the atrium) enables audio for works that support it
 - In Great Wave (No. 01), press 📷 to control the sea by hand: an open palm dragged through the water swirls it; closing a fist and opening it again throws spray
-- In Birth of Venus (No. 02), press 📷 and your open hand becomes the west wind: sweep it to blow the sea-foam off the goddess, hold it still to part the foam with a soft breath, close a fist and open it again for a gust, and a fast sweep leaves rose petals in its wake. Wind and gusts also work with the mouse (drag and click)
+- In Birth of Venus (No. 02), press 📷 and your open hand becomes the west wind: sweep it to scatter the sea-foam that forms the goddess, hold it still and a soft breath parts the foam beneath it, close a fist and open it again for a gust, and a fast sweep leaves rose petals in its wake. Wind and gusts also work with the mouse (drag and click)
 - In Mona Lisa (No. 04), press 📷 and sweep an open palm across the portrait to stir the sfumato haze; close a fist and open it again, and the whole portrait scatters into smoke, the face returning last. The mouse keeps working as a fallback (drag and click)
 - In Tower of Babel (No. 10), press 📷 and raise one hand to build, or hold up both hands for a moment to collapse the tower
 - In The Tree of Life (No. 11), press 📷 and hold up a hand: new golden branches sprout toward wherever your hand lingers, and sweeping it sideways stirs the wind through the whole tree. The mouse keeps working as a fallback
@@ -196,7 +196,7 @@ Masterpieces Reborn은 호쿠사이의 파도에서 안견의 몽유도원도까
 
 - **4개 전시관, 16점의 인터랙티브 작품** — 입자 유체, 등불 키아로스쿠로, 수묵 번짐, 살아있는 군중, 달빛 내러티브, 두루마리 패럴랙스, 종이 인형극, 클릭마다 재조립되는 제너러티브 큐비즘 초상
 - **제로-빌드 아키텍처** — 바닐라 ES 모듈과 Canvas 2D만 사용합니다. 프레임워크·번들러가 없어 배포는 `aws s3 sync` 한 번입니다
-- **손짓 인터랙션 작품** — 작품 안 📷 버튼을 누른 시점에만 MediaPipe Hand Landmarker(CDN, 버전 고정)를 불러오고, 합성을 켠 작품에서는 셸이 손을 포인터 규약으로 합성합니다. 가나가와 파도에서는 펼친 손이 바다를 휘젓고 주먹을 쥐었다 펼치면 물보라가 튀며, 비너스의 탄생에서는 같은 펼친 손이 서풍이 되어 바다 거품과 장미 꽃잎을 흩날립니다. 버튼을 누르기 전에는 외부 다운로드가 없고 마우스는 폴백으로 계속 동작합니다. 카메라 영상은 브라우저 안에서만 처리되며 서버로 전송되거나 저장되지 않습니다
+- **손짓 인터랙션 작품** — 작품 안 📷 버튼을 누른 시점에만 MediaPipe Hand Landmarker(CDN, 버전 고정)를 불러오고, 합성을 켠 작품에서는 셸이 손을 포인터 규약으로 합성합니다. 가나가와 파도에서는 펼친 손이 바다를 휘젓고 주먹을 쥐었다 펼치면 물보라가 튀며, 비너스의 탄생에서는 같은 펼친 손이 서풍이 되어 바다 거품을 흩날리고 빠른 손길 뒤에 장미 꽃잎을 남깁니다. 버튼을 누르기 전에는 외부 다운로드가 없고 마우스는 폴백으로 계속 동작합니다. 카메라 영상은 브라우저 안에서만 처리되며 서버로 전송되거나 저장되지 않습니다
 - **공용 입자 엔진** — 재사용 가능한 응집·흩어짐·복원 엔진(`js/particle-engine.js`)이 파도의 방을 구동합니다. 원작에서 샘플링한 픽셀이 스프링 입자가 되어 손길에 흩어졌다가 불멸의 형상으로 되돌아옵니다
 - **데이터 주도 셸** — `js/data.js`가 단일 진실 소스입니다. 16개 메타데이터 항목만으로 아트리움, 카드, 뷰어, 내비게이션이 자동으로 렌더됩니다
 - **작품 모듈 계약** — 모든 작품은 `{init, tick, resize, dispose}`를 내보내는 하나의 ES 모듈입니다. rAF 루프와 포인터 상태는 셸이 소유하므로 작품 모듈은 순수하고 누수가 없습니다
@@ -283,7 +283,7 @@ python3 -m http.server 8090
 - Escape로 아트리움에 돌아가고, 화살표 키로 작품을 이동합니다
 - 아트리움 우상단 사운드 토글로 사운드 지원 작품의 소리를 켭니다
 - 01번 가나가와 파도에서 📷를 누르면 손으로 바다를 다룹니다. 펼친 손을 움직이면 소용돌이, 주먹을 쥐었다 펼치면 물보라
-- 02번 비너스의 탄생에서 📷를 누르면 펼친 손이 서풍이 됩니다. 손을 휘저으면 여신을 이루는 바다 거품이 흩날리고, 가만히 두면 손 아래 거품이 숨결에 살짝 갈라지며, 주먹을 쥐었다 펼치면 돌풍, 빠르게 지나가면 그 자리에 장미 꽃잎이 날립니다. 바람과 돌풍은 마우스로도 가능합니다(드래그·클릭)
+- 02번 비너스의 탄생에서 📷를 누르면 펼친 손이 서풍이 됩니다. 손을 휘저으면 여신을 이루는 바다 거품이 흩날리고, 손을 가만히 두면 그 아래 거품이 숨결에 살짝 갈라집니다. 주먹을 쥐었다 펼치면 돌풍이 몰아치고, 손이 빠르게 지나간 자리에는 장미 꽃잎이 날립니다. 바람과 돌풍은 마우스로도 가능합니다(드래그·클릭)
 - 04번 모나리자에서 📷를 누르고 펼친 손을 초상 위로 움직이면 스푸마토 안개가 휘저어지고, 주먹을 쥐었다 펼치면 초상 전체가 연무로 흩어진 뒤 얼굴이 마지막에 돌아옵니다. 마우스로도 드래그·클릭으로 그대로 가능합니다
 - 10번 바벨탑에서 📷를 누르고 한 손을 들면 탑이 쌓이고, 두 손을 잠시 들고 있으면 무너집니다
 - 11번 생명의 나무에서 📷를 누르고 손을 들면 손이 머무는 자리로 금빛 가지가 돋아 자라고, 좌우로 휘두르면 나무 전체에 바람이 입니다. 마우스로도 그대로 가능합니다
