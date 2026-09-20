@@ -1,15 +1,35 @@
 // js/pieces/08-rain-steam-speed.js
 // After Turner — Rain, Steam and Speed (1844). 절차적.
 // 금갈색 안개 유동장 속 대각선 철교와 다가오는 증기기관차.
+// 🎤 소리: 숨(지속음)이 굴뚝 증기·안개 밀어내기·빗줄기를 키우고, 박수·외침(스파이크)이 기적을 울린다.
+
+import { makeSoundState, soundStep } from "../sound-gesture.js";
 
 let ctx = null, W = 0, H = 0, reduced = false, T = 0;
 
 // 안개 입자 · 비 스트릭 · 기적 증기 뭉게
 let fog = [], rain = [], puffs = [];
+// puffs 상한 — 클릭 연타·지속 방출로 무한 누적되지 않도록(초과 시 오래된 것부터 제거)
+const PUFF_MAX = 200;
 // 커서 속도 주입(유동장 교란)
 let stir = { x: 0, y: 0, vx: 0, vy: 0, life: 0 };
 // 화면 진동(기적)
 let shake = 0;
+// 기적 쿨다운(초): 클릭 연타·소리 스파이크 모두 이 간격 안에서는 무시
+let whistleCool = 0;
+const WHISTLE_COOLDOWN = 0.6;
+
+// 마이크 getter(없으면 null) · 소리 헬퍼 상태 · 이번 프레임 결과 { energy, onset, strength }
+let mic = null, snd = makeSoundState(), sound = { energy: 0, onset: false, strength: 0 };
+// 이번 프레임 소리 세기(0..1): reduced 면 절반, 미세 잔류값은 0으로 — 마이크 비활성 시 기존 동작과 완전 동일
+let soundE = 0;
+const SOUND_EPS = 0.01;
+// 숨 밀어내기(지속음): 기차 현재 위치를 앵커로 한 방사형 교란 — 커서용 stir 와 별도 변수
+// x,y 앵커 · k 세기(∝ soundE) · 반경은 W·0.35(updateFog 에서 계산)
+let breath = { x: 0, y: 0, k: 0 };
+const BREATH_PUSH = 220;       // 앵커 중심에서 밀어내는 최대 속도(px/s, k=1 기준, 거리 감쇠)
+// 지속 증기 방출 누적 카운터: rate·dt 를 쌓아 정수부만큼 방출
+let emitAcc = 0;
 // 기차 접근 위상(0..1, ~20초 루프)
 let trainT = 0;
 const LOOP = 20; // 초
@@ -74,7 +94,11 @@ export default {
     ctx = opts.ctx; W = opts.width; H = opts.height;
     reduced = !!opts.reducedMotion; T = 0; trainT = 0.15; shake = 0;
     stir = { x: 0, y: 0, vx: 0, vy: 0, life: 0 };
-    puffs = [];
+    puffs = []; whistleCool = 0;
+    // 소리 상태 초기화(마이크 getter 는 셸이 opts.audio.mic 로 넘긴다 — 없으면 null)
+    mic = (opts.audio && opts.audio.mic) || null;
+    snd = makeSoundState(); sound = { energy: 0, onset: false, strength: 0 }; soundE = 0;
+    breath = { x: 0, y: 0, k: 0 }; emitAcc = 0;
     layout();
     bakeBackground();     // 배경 1회 베이크
     bgFresh = true;       // 첫 프레임 불투명 도장 예약
@@ -83,6 +107,11 @@ export default {
   },
 
   tick(dt, ptr) {
+    // 🎤 소리 스텝(폴링만): 마이크 비활성이면 0으로 스텝 → energy 자연 감쇠, onset 없음 → 기존 동작과 동일
+    sound = soundStep(mic && mic.active() ? mic.level() : 0, dt, snd);
+    soundE = sound.energy * (reduced ? 0.5 : 1);
+    if (soundE < SOUND_EPS) soundE = 0;
+
     T += dt;
     // 기차 위상 진행 (도착 후 다시 멀리서)
     trainT += dt / LOOP;
@@ -98,8 +127,24 @@ export default {
       stir.life -= dt * 1.6;
     }
 
-    // 클릭: 기적 — 증기 뭉게 + 진동 1회
+    // 기적 쿨다운 감소
+    if (whistleCool > 0) whistleCool = Math.max(0, whistleCool - dt);
+    // 클릭: 기적 — 증기 뭉게 + 진동 1회(0.6s 쿨다운은 whistle 안에서)
     if (ptr && ptr.justDown) whistle();
+    // 소리 스파이크(박수·외침): 기적 — 클릭과 같은 효과, 같은 쿨다운
+    if (sound.onset) whistle();
+
+    // 숨(지속음): 굴뚝에서 초당 4+12·energy 개 작은 증기 지속 방출 + 기차 위치 앵커 방사형 안개 밀어내기
+    if (soundE > 0) {
+      const tr = trainPose(trainT);
+      emitAcc += (4 + 12 * soundE) * dt;
+      const n = Math.floor(emitAcc);
+      emitAcc -= n;
+      if (n > 0) breathPuffs(n, tr, soundE);
+      breath.x = tr.x; breath.y = tr.y; breath.k = soundE;
+    } else {
+      emitAcc = 0; breath.k = 0;
+    }
 
     if (shake > 0) shake = Math.max(0, shake - dt * 3);
 
@@ -118,6 +163,7 @@ export default {
   dispose() {
     ctx = null; fog = []; rain = []; puffs = [];
     bg = null; bgFresh = true;   // 오프스크린 참조 해제
+    mic = null; soundE = 0; breath.k = 0; emitAcc = 0;   // 마이크 getter 해제
   },
 };
 
@@ -135,8 +181,10 @@ function rainCount() {
   return Math.max(40, Math.min(60, Math.round(W / 24)));
 }
 
-// 기적: 굴뚝에서 밝은 입자 30개 상승 확산 + 진동
+// 기적: 굴뚝에서 밝은 입자 30개 상승 확산 + 진동. 0.6s 쿨다운(클릭 연타·소리 스파이크 공통)
 function whistle() {
+  if (whistleCool > 0) return;
+  whistleCool = WHISTLE_COOLDOWN;
   const tr = trainPose(trainT);
   for (let i = 0; i < 30; i++) {
     puffs.push({
@@ -146,7 +194,26 @@ function whistle() {
       r: rnd(6, 16) * (0.6 + tr.s), a: rnd(0.5, 0.85), life: 1,
     });
   }
+  capPuffs();
   if (!reduced) shake = 1;
+}
+
+// 숨 증기: 굴뚝에서 작은 puff n개 — 기적보다 작고 옅게, 세기(e)가 클수록 조금 더 빠르게 솟는다
+function breathPuffs(n, tr, e) {
+  for (let i = 0; i < n; i++) {
+    puffs.push({
+      x: tr.stackX + rnd(-tr.s * 4, tr.s * 4),
+      y: tr.stackY,
+      vx: rnd(-12, 12), vy: rnd(-55, -25) * (0.8 + 0.5 * e),
+      r: rnd(3, 8) * (0.6 + tr.s), a: rnd(0.25, 0.5), life: 1,
+    });
+  }
+  capPuffs();
+}
+
+// puffs 상한 유지: 배열 앞쪽(오래된 것)부터 제거
+function capPuffs() {
+  if (puffs.length > PUFF_MAX) puffs.splice(0, puffs.length - PUFF_MAX);
 }
 
 // 기차 자세: 위상 p(0=멀리, 1=도착직전 우하단 통과)
@@ -226,6 +293,17 @@ function updateFog(dt) {
         const k = (1 - Math.sqrt(d2) / R) * stir.life * (reduced ? 0.3 : 1);
         vx += stir.vx * 0.15 * k;
         vy += stir.vy * 0.15 * k;
+      }
+    }
+    // 숨 교란: 기차 위치를 중심으로 반경 W·0.35 안 입자를 바깥으로 밀어낸다(거리 감쇠, 세기 ∝ 소리)
+    if (breath.k > 0) {
+      const dx = f.x - breath.x, dy = f.y - breath.y;
+      const d = Math.hypot(dx, dy);
+      const R = W * 0.35;
+      if (d < R && d > 1e-3) {
+        const k = (1 - d / R) * breath.k * BREATH_PUSH / d;
+        vx += dx * k;
+        vy += dy * k;
       }
     }
     const mul = f.sp * (reduced ? 0.5 : 1) * dt;
@@ -333,10 +411,12 @@ function drawTrain() {
 }
 
 // 비: 가는 사선 스트릭 우상→좌하 (안개색과 섞이는 따뜻한 톤)
+// 소리가 크면 속도·알파 ×(1+0.3·energy) — 폭풍 느낌
 function drawRain(dt) {
   ctx.lineWidth = 1;
   const dxu = -0.5, dyu = 1;            // 방향(좌하)
-  const spd = reduced ? 0.4 : 1;
+  const gust = 1 + 0.3 * soundE;
+  const spd = (reduced ? 0.4 : 1) * gust;
   for (let i = 0; i < rain.length; i++) {
     const r = rain[i];
     r.x += dxu * r.v * dt * spd;
@@ -345,7 +425,7 @@ function drawRain(dt) {
       r.x = rnd(0, 1.2 * W); r.y = rnd(-0.2 * H, 0);
     }
     // 스트릭마다 알파가 달라야 하므로 개별 stroke
-    ctx.strokeStyle = `rgba(235,214,164,${r.a})`;
+    ctx.strokeStyle = `rgba(235,214,164,${Math.min(1, r.a * gust)})`;
     ctx.beginPath();
     ctx.moveTo(r.x, r.y);
     ctx.lineTo(r.x + dxu * r.len, r.y + dyu * r.len);
