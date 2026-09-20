@@ -53,10 +53,6 @@ test("handPointer 플래그는 boolean이며, 켜진 작품은 cam도 켜져 있
     }
   }
   assert.ok(WORKS.some((w) => w.handPointer), "handPointer 작품이 하나는 있다");
-  const venus = WORKS.find((w) => w.no === "02");
-  assert.equal(venus.handPointer, true, "02번은 셸 손 합성으로 바람을 일으킨다");
-  assert.equal(venus.camHands, 1, "02번은 주 손만 사용");
-  assert.match(venus.hint, /📷/, "02번 힌트는 카메라를 안내한다");
 });
 
 test("cam 플래그는 boolean이다", () => {
@@ -74,4 +70,11 @@ test("camHands는 있으면 1 또는 2이고 cam: true인 작품에만 있다", 
     }
   }
   assert.equal(WORKS.find((w) => w.no === "03").camHands, 1, "03번은 주 손만 사용");
+});
+
+test("02번 비너스는 셸 손 합성 작품이다(handPointer·주 손만·힌트 📷) — handPointer 작품은 모두 힌트에 📷를 안내한다", () => {
+  const venus = WORKS.find((w) => w.no === "02");
+  assert.equal(venus.handPointer, true, "02번은 셸 손 합성으로 바람을 일으킨다");
+  assert.equal(venus.camHands, 1, "02번은 주 손만 사용");
+  for (const w of WORKS.filter((w) => w.handPointer)) assert.match(w.hint, /📷/, `${w.no}: 손 합성 작품의 힌트는 📷를 안내한다`);
 });
