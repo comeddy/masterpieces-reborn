@@ -55,8 +55,8 @@ export class ParticleField {
     this.damping = damping;
     this.jitter = jitter;
     this.margin = margin;
-    // 화면 크기에 따라 입자 수 자동 감축 (모바일 보호). areaPerDot = 입자 하나가 차지하는 화면 면적(px²)의
-    // 하한 — 기본 110. 작품이 더 촘촘한 점묘가 필요하면 낮춰 캡을 올릴 수 있다(프레임 비용은 비례해 증가).
+    // 화면 크기에 따라 입자 수 자동 감축 (모바일 보호). areaPerDot = 캔버스 전체 면적을 나눠 최대 입자 수를
+    // 정하는 면적 예산(px²/점) — 기본 110. 값을 낮추면 캡이 올라간다(프레임 비용은 비례해 증가).
     const cap = Math.max(400, Math.min(count, Math.floor((w * h) / areaPerDot)));
     let pts;
     if (image) {

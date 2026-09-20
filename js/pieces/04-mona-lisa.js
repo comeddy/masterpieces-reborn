@@ -2,8 +2,8 @@
 // After Leonardo — Mona Lisa (c.1503) · 점묘 안개 초상
 // 점(입자)만으로 얼굴을 해상한다. 점 밀도는 전 영역 균일하다(DENSITY_MODE "uniform", 사용자 결정:
 // 얼굴 주변만 촘촘한 것을 원치 않음). 대신 전체 밀도를 올린다 — 총 18,000점, 엔진 캡 80px²/점.
-// 경계가 지나는 셀은 가장 어두운 픽셀에 점을 스냅해(특징 보존 샘플) 입술선·눈꺼풀이 격자에 묻히지
-// 않게 하고, 응집 시 얼굴 점의 명도 대비를 넓히고 밝은 점을 조금 키워 눈·코·입(미소)이 점묘처럼
+// 얼굴 필드 셀은(가중치 확률로) 셀 안 가장 어두운 픽셀에 점을 스냅해(특징 보존 샘플 — 임계 FEATURE_CONTRAST,
+// 입 서브필드 MOUTH_FEATURE_CONTRAST) 입술선·눈꺼풀이 격자에 묻히지 않게 하고, 응집 시 얼굴 점의 명도 대비를 넓히고 밝은 점을 조금 키워 눈·코·입(미소)이 점묘처럼
 // 읽히게 한다. 흩어지면 sfumato 연기. ("content" 모드 — 밝기·경계·피부빛 기반 밀도 — 는 보존되어
 // 상수 하나로 되돌릴 수 있다.)
 //
@@ -269,7 +269,7 @@ function buildPoints(img) {
   imgW = iw; imgH = ih;
   densMap = new Map();
   for (const q of points) densMap.set(Math.round(q.v * ih) * iw + Math.round(q.u * iw), q.dens);
-  shuffle(points); // 화면 면적 캡(w*h/110)이 밝은 곳·어두운 곳을 같은 비율로 자르도록
+  shuffle(points); // 화면 면적 캡(w*h/areaPerDot, uniform 80)이 전 영역을 같은 비율로 자르도록
   return { points, aspect: iw / ih };
 }
 
