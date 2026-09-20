@@ -1,9 +1,10 @@
 // test/fixtures/fake-vision/vision_bundle.mjs — E2E용 가짜 MediaPipe.
 // cam.js가 window.__CAM_CDN__ 시임으로 이 번들을 로드하면, 테스트가
 // window.__FAKE_HANDS__ = { n, x, y, pinch? } (x,y는 화면 기준 0..1)로 손을 연출한다.
-// pinch가 없으면(undefined) 활짝 벌린 손으로 취급(기존 {n,x,y} 호환).
+// pinch가 없으면(undefined) 핀치 비율 기준으로만 '벌린 손'(기존 {n,x,y} 호환) — 손끝 거리 기준
+// hand-pointer openness는 ≈0(주먹 취급)이라 handPointer 작품의 펼침 연출에는 open: true가 필요하다.
 // open: 다섯 손끝을 손목에서 멀리(펼침 비율 ≈1.9 → hand-pointer openness 1) — handPointer 합성 작품의
-//       \"펼친 손\" 연출. fist: 손끝을 손바닥 안으로(비율 ≈0.8 → openness 0) — 주먹→펼침(justDown) 연출.
+//       "펼친 손" 연출. fist: 손끝을 손바닥 안으로(비율 ≈0.8 → openness 0) — 주먹→펼침(justDown) 연출.
 // 워커에서는 cam.js가 frame 메시지의 fake로 globalThis에 주입(메인 폴백에서는 globalThis===window).
 export const FilesetResolver = { forVisionTasks: async () => ({}) };
 export class HandLandmarker {
