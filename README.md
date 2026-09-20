@@ -37,7 +37,7 @@ The entire site — curation, specification, 16 artwork modules, tests, quality 
 - **16 interactive works across 4 wings** — particle fluids, chiaroscuro lantern reveals, ink-wash diffusion, living crowds, moonlight narratives, scroll-journey parallax, paper-puppet theatre, and a generative cubist portrait that reassembles on every click
 - **Zero-build architecture** — vanilla ES modules and Canvas 2D only; no frameworks, no bundler; deploying is a single `aws s3 sync`
 - **Hand-gesture works** — pressing the 📷 button in a work loads MediaPipe Hand Landmarker on demand (pinned CDN version) and, for works that opt in, the shell synthesizes the hand into the pointer contract: in Great Wave an open palm stirs the sea and a fist-to-open flick throws spray, and in Birth of Venus the same open palm becomes the west wind that scatters the sea-foam and leaves rose petals in its wake. Nothing external is downloaded until the button is pressed; the mouse keeps working as a fallback. Camera video is processed locally in the browser and is never uploaded or stored
-- **Sound-reactive works** — pressing the 🎤 button lets the microphone drive a work: in Creation of Adam a sustained breath or voice charges the spark of life; in Rain, Steam and Speed a breath makes the locomotive puff steam and pushes the fog while a shout sounds the whistle; in Inwang After Rain a breath clears the mountain mist and a clap drops a bead of ink; in Ssireum the louder the crowd noise, the more the spectators sway, and a shout throws the wrestlers' move; in Lovers under the Moon a blown breath drives the cloud across the moon and a clap makes the lantern flicker. Audio is analysed locally in the browser and never recorded or uploaded; the mouse keeps working as a fallback
+- **Sound-reactive works** — pressing the 🎤 button lets the microphone drive a work: in Creation of Adam a sustained breath or voice charges the spark of life; in Rain, Steam and Speed a breath makes the locomotive puff steam and pushes the fog while a shout or clap sounds the whistle; in Inwang After Rain a breath clears the mountain mist and a shout or clap drops a bead of ink; in Ssireum the louder the crowd noise, the more the spectators sway, and a shout or clap throws the wrestlers' move; in Lovers under the Moon a blown breath drives the cloud across the moon and a shout or clap makes the lantern flicker. Audio is analysed locally in the browser and never recorded or uploaded; the mouse keeps working as a fallback
 - **Shared particle engine** — a reusable gather/scatter/restore engine (`js/particle-engine.js`) drives the Wave Hall: pixels sampled from the original painting become spring-driven particles that scatter under the pointer and return to the immortal image
 - **Data-driven shell** — `js/data.js` is the single source of truth; the atrium, cards, viewer, and navigation render automatically from 16 metadata entries
 - **Piece module contract** — every artwork is one ES module exporting `{init, tick, resize, dispose}`; the shell owns the rAF loop and pointer state, so pieces stay pure and leak-free
@@ -135,9 +135,9 @@ python3 -m http.server 8090
 - In Sunflowers (No. 07), press 📷 and wave your hand from side to side to bend the stems in a brush-wind; close a fist and open it again and the nearest flower blooms
 - In Dream Journey (No. 16), press 📷 and move an open palm sideways to unroll the scroll; lower your hand and the dream drifts on by itself
 - In Rain, Steam and Speed (No. 08), press 🎤 and blow: the locomotive puffs steam and the fog is pushed back; shout or clap to sound the whistle
-- In Inwang After Rain (No. 13), press 🎤 and blow to clear the mist from the mountainside; clap and a bead of ink falls
+- In Inwang After Rain (No. 13), press 🎤 and blow to clear the mist from the mountainside; shout or clap and a bead of ink falls
 - In Ssireum (No. 14), press 🎤 and cheer: the louder you are, the more the crowd sways, and a shout or clap throws the wrestlers' move
-- In Lovers under the Moon (No. 15), press 🎤 and blow a long breath: the cloud drifts across the moon and the night deepens; clap and the lantern flickers
+- In Lovers under the Moon (No. 15), press 🎤 and blow a long breath: the cloud drifts across the moon and the night deepens; shout or clap and the lantern flickers
 
 Deploy your own copy (creates an S3 bucket and CloudFront distribution on first run):
 
@@ -206,7 +206,7 @@ Masterpieces Reborn은 호쿠사이의 파도에서 안견의 몽유도원도까
 - **4개 전시관, 16점의 인터랙티브 작품** — 입자 유체, 등불 키아로스쿠로, 수묵 번짐, 살아있는 군중, 달빛 내러티브, 두루마리 패럴랙스, 종이 인형극, 클릭마다 재조립되는 제너러티브 큐비즘 초상
 - **제로-빌드 아키텍처** — 바닐라 ES 모듈과 Canvas 2D만 사용합니다. 프레임워크·번들러가 없어 배포는 `aws s3 sync` 한 번입니다
 - **손짓 인터랙션 작품** — 작품 안 📷 버튼을 누른 시점에만 MediaPipe Hand Landmarker(CDN, 버전 고정)를 불러오고, 합성을 켠 작품에서는 셸이 손을 포인터 규약으로 합성합니다. 가나가와 파도에서는 펼친 손이 바다를 휘젓고 주먹을 쥐었다 펼치면 물보라가 튀며, 비너스의 탄생에서는 같은 펼친 손이 서풍이 되어 바다 거품을 흩날리고 빠른 손길 뒤에 장미 꽃잎을 남깁니다. 버튼을 누르기 전에는 외부 다운로드가 없고 마우스는 폴백으로 계속 동작합니다. 카메라 영상은 브라우저 안에서만 처리되며 서버로 전송되거나 저장되지 않습니다
-- **소리 반응 작품** — 🎤 버튼을 누르면 마이크가 작품을 움직입니다. 천지창조에서는 지속되는 숨·목소리가 생명의 불꽃을 충전하고, 비·증기·속도에서는 숨을 불면 기차가 증기를 뿜고 안개가 밀려나며 외치면 기적이 울리고, 인왕제색도에서는 숨에 산허리 안개가 걷히고 박수에 먹 한 방울이 떨어지며, 씨름에서는 환호가 클수록 구경꾼이 들썩이고 외침에 기술이 걸리고, 월하정인에서는 바람 소리에 구름이 달을 가리고 박수에 초롱불이 깜빡입니다. 소리는 브라우저 안에서만 분석되며 녹음·전송되지 않고, 마우스는 폴백으로 계속 동작합니다
+- **소리 반응 작품** — 🎤 버튼을 누르면 마이크가 작품을 움직입니다. 천지창조에서는 지속되는 숨·목소리가 생명의 불꽃을 충전하고, 비·증기·속도에서는 숨을 불면 기차가 증기를 뿜고 안개가 밀려나며 외침이나 박수에 기적이 울리고, 인왕제색도에서는 숨에 산허리 안개가 걷히고 외침이나 박수에 먹 한 방울이 떨어지며, 씨름에서는 환호가 클수록 구경꾼이 들썩이고 외침이나 박수에 기술이 걸리고, 월하정인에서는 바람 소리에 구름이 달을 가리고 외침이나 박수에 초롱불이 깜빡입니다. 소리는 브라우저 안에서만 분석되며 녹음·전송되지 않고, 마우스는 폴백으로 계속 동작합니다
 - **공용 입자 엔진** — 재사용 가능한 응집·흩어짐·복원 엔진(`js/particle-engine.js`)이 파도의 방을 구동합니다. 원작에서 샘플링한 픽셀이 스프링 입자가 되어 손길에 흩어졌다가 불멸의 형상으로 되돌아옵니다
 - **데이터 주도 셸** — `js/data.js`가 단일 진실 소스입니다. 16개 메타데이터 항목만으로 아트리움, 카드, 뷰어, 내비게이션이 자동으로 렌더됩니다
 - **작품 모듈 계약** — 모든 작품은 `{init, tick, resize, dispose}`를 내보내는 하나의 ES 모듈입니다. rAF 루프와 포인터 상태는 셸이 소유하므로 작품 모듈은 순수하고 누수가 없습니다
@@ -304,9 +304,9 @@ python3 -m http.server 8090
 - 07번 해바라기에서 📷를 누르고 손을 좌우로 흔들면 붓바람에 꽃대가 눕고, 주먹을 쥐었다 펼치면 가까운 꽃이 활짝 핍니다
 - 16번 몽유도원도에서 📷를 누르고 펼친 손을 옆으로 움직이면 두루마리가 손을 따라 펴지고, 손을 내리면 꿈이 다시 제 속도로 흐릅니다
 - 08번 비·증기·속도에서 🎤를 누르고 숨을 불면 기차가 증기를 뿜고 안개가 밀려나며, 외치거나 박수를 치면 기적이 터집니다
-- 13번 인왕제색도에서 🎤를 누르고 숨을 불면 산허리 안개가 걷히고, 박수를 치면 먹 한 방울이 떨어집니다
+- 13번 인왕제색도에서 🎤를 누르고 숨을 불면 산허리 안개가 걷히고, 외치거나 박수를 치면 먹 한 방울이 떨어집니다
 - 14번 씨름에서 🎤를 누르고 환호하면 소리가 클수록 구경꾼이 들썩이고, 외치거나 박수를 치면 씨름꾼이 기술을 겁니다
-- 15번 월하정인에서 🎤를 누르고 "후—" 하고 바람 소리를 내면 구름이 달을 가려 밤이 깊어지고, 박수를 치면 초롱불이 깜빡입니다
+- 15번 월하정인에서 🎤를 누르고 "후—" 하고 바람 소리를 내면 구름이 달을 가려 밤이 깊어지고, 외치거나 박수를 치면 초롱불이 깜빡입니다
 
 직접 배포하려면(최초 실행 시 S3 버킷과 CloudFront 배포를 생성합니다):
 
