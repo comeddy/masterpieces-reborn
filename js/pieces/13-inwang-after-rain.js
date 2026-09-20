@@ -248,7 +248,9 @@ function clearanceMul(x, y) {
 function drawFog(cdt) {
   const flow = reduced ? 0.5 : 1;      // reducedMotion: 안개 흐름 속도 절반
   // 소리: 지속음 세기만큼 세 띠가 함께 걷힌다(energy는 이미 평활). reducedMotion이면 진폭 절반. 무음이면 정확히 1
-  const soundMul = 1 - (reduced ? FOG_CLEAR * 0.5 : FOG_CLEAR) * sound.energy;
+  //   08/14/15 와 동일한 EPS 처리: energy 0.01 미만은 0 으로 간주(마이크를 끈 뒤 감쇠 꼬리가 안개를 영구히 옅게 하지 않도록)
+  const e = sound.energy < 0.01 ? 0 : sound.energy;
+  const soundMul = 1 - (reduced ? FOG_CLEAR * 0.5 : FOG_CLEAR) * e;
   const F = fit;
   const x0 = F.x - F.w * 0.15, x1 = F.x + F.w * 1.15, span = x1 - x0;
   const [fr, fg, fb] = FOG_WARM;

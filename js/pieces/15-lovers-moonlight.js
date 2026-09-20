@@ -235,19 +235,23 @@ export default {
 
     // 🎤 소리 스텝(폴링만): 마이크 비활성이면 0으로 스텝 → energy 자연 감쇠, onset 없음 → 기존 동작과 동일
     sound = soundStep(mic && mic.active() ? mic.level() : 0, cdt, snd);
-    const wind = sound.energy * (reduced ? 0.5 : 1);   // 바람 세기(0..1): reduced 면 절반
-    gust = 1 + 0.4 * wind;
+    // 08/14 와 동일한 EPS 처리: energy 0.01 미만은 0 으로 간주(마이크를 끈 뒤 감쇠 꼬리가 구름을 영구히 당기지 않도록)
+    const e = sound.energy < 0.01 ? 0 : sound.energy;
+    const wind = e * (reduced ? 0.5 : 1);              // 바람 세기(0..1): reduced 면 절반
+    gust = 1 + 0.4 * wind;                             // 구름 반경·요동 배율은 기존 wind 그대로
+    // 구름 당김 포화 곡선: pull = min(1, wind·1.8) → energy ≈0.56 이면 달에 완전 도달(reduced 는 wind 절반이라 최대 0.9 — 리뷰 반영 2026-09-20)
+    const pull = Math.min(1, wind * 1.8);
 
     // 구름 목표를 하나로 합산해 한 번만 lerp(0.09 @60fps, dt 보정)
     //   기본 목표 = 커서(inside) 또는 현재 위치(커서가 떠나면 머무름 — 기존과 동일)
-    //   최종 목표 = 기본 목표에서 달 쪽으로 wind 만큼 끌려간 점 → wind 0 이면 기존 추종식과 동치
+    //   최종 목표 = 기본 목표에서 달 쪽으로 pull(=min(1, wind·1.8)) 만큼 끌려간 점 → wind 0 이면 기존 추종식과 동치
     const inside = !!(ptr && ptr.inside);
     if (inside && !seeded) { cx = ptr.x; cy = ptr.y; seeded = true; }
     if (wind > 0.05) { seeded = true; soundMoved = true; }   // 소리로 움직이기 시작하면 이후 첫 커서 프레임의 순간이동 방지
     if (inside) soundMoved = false;      // 커서가 들어오면 커서가 구름을 맡는다(마우스 동작은 기존과 동일)
     // 기본 목표: 커서 안이면 커서, 밖이면 — 소리로 움직인 뒤라면 초기 위치(소리가 멎으면 구름이 물러나 달빛 회복), 아니면 현재 위치(기존 동작)
     const bx = inside ? ptr.x : (soundMoved ? W * 0.5 : cx), by = inside ? ptr.y : (soundMoved ? H * 0.86 : cy);
-    const tx = lerp(bx, px(MOON.x), wind), ty = lerp(by, py(MOON.y), wind);
+    const tx = lerp(bx, px(MOON.x), pull), ty = lerp(by, py(MOON.y), pull);
     const a = 1 - Math.pow(1 - 0.09, cdt * 60);
     cx += (tx - cx) * a;
     cy += (ty - cy) * a;

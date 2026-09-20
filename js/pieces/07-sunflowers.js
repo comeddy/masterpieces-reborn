@@ -263,7 +263,8 @@ function handleInput(ptr) {
   // 드래그 = 붓바람: 커서 근처 꽃에 각속도 임펄스
   if (ptr.down && ptr.inside && (Math.abs(ptr.dx) > 0.1 || Math.abs(ptr.dy) > 0.1)) {
     const R = Math.min(W, H) * 0.42;
-    const push = clamp(ptr.dx, -60, 60) * (reduced ? 0.0003 : 0.0011);
+    // 임펄스 계수 0.0011→0.006(reduced 0.0003→0.0016): 손짓·마우스 모두 눕는 것이 보이도록 상향(2026-09-20). bend 클램프 ±0.6 은 그대로
+    const push = clamp(ptr.dx, -60, 60) * (reduced ? 0.0016 : 0.006);
     for (const f of flowers) {
       const d = Math.hypot(ptr.x - f.x, ptr.y - f.y);
       if (d < R) f.bendVel += push * (1 - d / R);
