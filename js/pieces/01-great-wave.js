@@ -73,7 +73,7 @@ function inFujiHalo(u, v) {
 // 절차적 후지산 점: 자리의 성긴 실픽셀 대신 또렷한 눈 덮인 삼각봉을 만든다.
 function fujiPoints() {
   const pts = [];
-  const N = 520;   // 주변 바다 밀도(≈0.08)의 1.3~1.5배가 되도록 — 형상은 읽히되 덩어리로 보이지 않게(900은 3배로 과밀)
+  const N = 900;   // 기슭 반너비 0.06·높이 0.086 삼각형을 채우는 수 — 화면 캡 슬라이스 후에도 봉우리가 또렷하도록
   for (let i = 0; i < N; i++) {
     const t = Math.sqrt(Math.random());                 // 면적 가중(기슭이 넓다)
     const hw = FUJI.wApex + (FUJI.wBase - FUJI.wApex) * t;
@@ -158,7 +158,7 @@ function tagParticles() {
       : cls === "mist" ? 0.25 : 0.5;
     p.drift = (cls === "foam" && !fuji) ? FOAM_DRIFT : 0;
     // 크기: 후지산 봉우리는 크게(작은 형상을 세움), 포말 큼, 나머지 중간.
-    const base = isSnow ? 2.7 : isSlope ? 2.4
+    const base = isSnow ? 3.0 : isSlope ? 2.6
       : cls === "foam" ? 2.7
       : cls === "mist" ? 2.3 : 2.2;
     p.size = base * (0.85 + Math.random() * 0.4);
