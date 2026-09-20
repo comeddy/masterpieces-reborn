@@ -83,7 +83,7 @@ For later works the user set a distinctive process rule: instead of being handed
 The user reviewed screenshots after each change; several pieces went through multiple honest iterations:
 
 - **Bull**: the first version was rejected twice ("no power, wrong head direction, too small") and was rebuilt as a full-screen close-up matching the original composition before being replaced by the Picasso homage
-- **Mona Lisa's smile**: an image-reveal solution made the smile visible but was rejected as "too photographic"; a hard-edged high-density face patch was rejected as "alien to the rest" and for making the opening gather awkwardly. The current version keeps a single uniform base grid with no separate face patch and raises face density only as a smooth, edgeless field. Dots snap to feature pixels (lip line, eyelids) so the smile survives sampling, and the gather is choreographed so body and background condense first and the face rises last
+- **Mona Lisa's smile**: an image-reveal solution made the smile visible but was rejected as "too photographic"; a hard-edged high-density face patch was rejected as "alien to the rest" and for making the opening gather awkwardly. The current version has no face patch at all: dot density follows the painting's light and contours, so the lit face and chest are denser and the dark dress sparser, with no halo around the head. Dots snap to feature pixels (lip line, eyelids) so the smile survives sampling, and the gather is choreographed so body and background condense first and the face rises last
 - **Great Wave full-screen**: the first cover-fit attempt destroyed the iconic silhouette (a uniform starfield) and was reverted; the redo differentiates particle density (empty sky, dense foam and sea) so the hooked wave reads clearly while traveling waves keep the whole screen undulating
 - **Ssireum puppets**: refined across three rounds — crop tiles, then silhouette cutouts with sticks and drop shadows, then background inpainting and stick shadows until no trace of the original wrestlers remained behind the lifted puppet
 
@@ -123,6 +123,7 @@ python3 -m http.server 8090
 - Press Escape to return to the atrium, and the arrow keys to move between works
 - The sound toggle (top right of the atrium) enables audio for works that support it
 - In Great Wave (No. 01), press 📷 to control the sea by hand: an open palm dragged through the water swirls it; closing a fist and opening it again throws spray
+- In Mona Lisa (No. 04), press 📷 and sweep an open palm across the portrait to stir the sfumato haze; close a fist and open it again and the whole portrait scatters into smoke, the face returning last. The mouse keeps working as a fallback (drag and click)
 - In Tower of Babel (No. 10), press 📷 and raise one hand to build, or hold up both hands for a moment to collapse the tower
 - In The Tree of Life (No. 11), press 📷 and hold up a hand: new golden branches sprout toward wherever your hand lingers, and sweeping it sideways stirs the wind through the whole tree. The mouse keeps working as a fallback
 - In Girl with a Pearl Earring (No. 03), press 📷 and your hand becomes the candle: sweep it to blow the light-dust away, and pinch thumb and index fingertips together to make the flame flicker in a wave of light. The mouse keeps working as a fallback
@@ -241,7 +242,7 @@ Masterpieces Reborn은 호쿠사이의 파도에서 안견의 몽유도원도까
 사용자는 변경마다 스크린샷을 검수했고, 여러 작품이 정직한 반복을 거쳤습니다:
 
 - **황소**: 초판이 두 차례 반려되었습니다("힘찬 기운이 없다, 소머리 방향이 틀렸다, 너무 작다"). 원작 구도와 같은 화면 가득 클로즈업으로 재구성된 뒤, 최종적으로 피카소 오마주로 교체되었습니다
-- **모나리자의 미소**: 이미지 리빌 방식은 미소를 보이게 했지만 "너무 사실적"이라 반려되었고, 경계가 뚜렷한 얼굴 고밀도 패치는 "주변과 이질적"이며 시작 응집이 어색하다는 피드백을 받았습니다. 현재판은 경계가 있는 별도 얼굴 패치를 없애고, 균일한 기본 격자 위에 얼굴 밀도만 경계 없는 연속 필드로 올립니다. 점을 특징 픽셀(입술선·눈꺼풀)에 스냅해 미소가 샘플링에서 살아남게 하고, 몸·배경이 먼저 응결하고 얼굴이 마지막에 떠오르도록 응집을 안무합니다
+- **모나리자의 미소**: 이미지 리빌 방식은 미소를 보이게 했지만 "너무 사실적"이라 반려되었고, 경계가 뚜렷한 얼굴 고밀도 패치는 "주변과 이질적"이며 시작 응집이 어색하다는 피드백을 받았습니다. 현재판은 얼굴 패치를 두지 않고 점 밀도가 원작의 빛과 윤곽을 따르게 합니다. 빛이 닿는 얼굴·가슴은 촘촘하고 어두운 드레스는 성겨서 머리 주변에 밀도 고리가 생기지 않습니다. 점을 특징 픽셀(입술선·눈꺼풀)에 스냅해 미소가 샘플링에서 살아남게 하고, 몸·배경이 먼저 응결하고 얼굴이 마지막에 떠오르도록 응집을 안무합니다
 - **파도 전체화면**: 첫 cover-fit 시도는 상징적 실루엣을 파괴해(균일한 별밭) revert되었습니다. 재작업은 입자 밀도를 차별화(하늘은 비우고 포말·바다는 조밀)해 갈고리 파도가 또렷이 읽히면서 진행파가 화면 전체를 일렁이게 합니다
 - **씨름 인형**: 세 라운드에 걸쳐 다듬었습니다 — 크롭 타일, 실루엣 오리기+막대+드롭섀도, 그리고 배경 인페인트와 막대 그림자까지. 들린 인형 뒤에 원작 씨름꾼의 흔적이 전혀 남지 않을 때까지
 
@@ -281,6 +282,7 @@ python3 -m http.server 8090
 - Escape로 아트리움에 돌아가고, 화살표 키로 작품을 이동합니다
 - 아트리움 우상단 사운드 토글로 사운드 지원 작품의 소리를 켭니다
 - 01번 가나가와 파도에서 📷를 누르면 손으로 바다를 다룹니다. 펼친 손을 움직이면 소용돌이, 주먹을 쥐었다 펼치면 물보라
+- 04번 모나리자에서 📷를 누르고 펼친 손을 초상 위로 움직이면 스푸마토 안개가 휘저어지고, 주먹을 쥐었다 펼치면 초상 전체가 연무로 흩어진 뒤 얼굴이 마지막에 돌아옵니다. 마우스로도 드래그·클릭으로 그대로 가능합니다
 - 10번 바벨탑에서 📷를 누르고 한 손을 들면 탑이 쌓이고, 두 손을 잠시 들고 있으면 무너집니다
 - 11번 생명의 나무에서 📷를 누르고 손을 들면 손이 머무는 자리로 금빛 가지가 돋아 자라고, 좌우로 휘두르면 나무 전체에 바람이 입니다. 마우스로도 그대로 가능합니다
 - 03번 진주 귀걸이를 한 소녀에서 📷를 누르면 손이 촛불이 됩니다. 손을 휙 저으면 빛 먼지가 흩날리고, 엄지와 검지 끝을 맞대면 촛불이 깜빡이며 빛의 파동이 퍼집니다. 마우스로도 그대로 가능합니다
