@@ -44,6 +44,17 @@ test("mic 플래그는 boolean이다", () => {
   }
 });
 
+// 집합 검사 — 어떤 작품이 🎤/📷 손짓 대상인지 명시(누락·오탈자 즉시 감지)
+test("mic 작품 집합은 08·09·13·14·15 다", () => {
+  const nos = WORKS.filter((w) => w.mic).map((w) => w.no).sort();
+  assert.deepEqual(nos, ["08", "09", "13", "14", "15"]);
+});
+
+test("handPointer 작품 집합은 01·02·04·05·06·07·16 이다", () => {
+  const nos = WORKS.filter((w) => w.handPointer).map((w) => w.no).sort();
+  assert.deepEqual(nos, ["01", "02", "04", "05", "06", "07", "16"]);
+});
+
 test("handPointer 플래그는 boolean이며, 켜진 작품은 cam도 켜져 있다(버튼 없이는 도달 불가)", () => {
   for (const w of WORKS) {
     if ("handPointer" in w) {
