@@ -124,7 +124,7 @@ python3 -m http.server 8090
 - The sound toggle (top right of the atrium) enables audio for works that support it
 - In Great Wave (No. 01), press 📷 to control the sea by hand: an open palm dragged through the water swirls it; closing a fist and opening it again throws spray
 - In Birth of Venus (No. 02), press 📷 and your open hand becomes the west wind: sweep it to blow the sea-foam off the goddess, hold it still to part the foam with a soft breath, close a fist and open it again for a gust, and a fast sweep leaves rose petals in its wake. Wind and gusts also work with the mouse (drag and click)
-- In Mona Lisa (No. 04), press 📷 and sweep an open palm across the portrait to stir the sfumato haze; close a fist and open it again and the whole portrait scatters into smoke, the face returning last. The mouse keeps working as a fallback (drag and click)
+- In Mona Lisa (No. 04), press 📷 and sweep an open palm across the portrait to stir the sfumato haze; close a fist and open it again, and the whole portrait scatters into smoke, the face returning last. The mouse keeps working as a fallback (drag and click)
 - In Tower of Babel (No. 10), press 📷 and raise one hand to build, or hold up both hands for a moment to collapse the tower
 - In The Tree of Life (No. 11), press 📷 and hold up a hand: new golden branches sprout toward wherever your hand lingers, and sweeping it sideways stirs the wind through the whole tree. The mouse keeps working as a fallback
 - In Girl with a Pearl Earring (No. 03), press 📷 and your hand becomes the candle: sweep it to blow the light-dust away, and pinch thumb and index fingertips together to make the flame flicker in a wave of light. The mouse keeps working as a fallback
