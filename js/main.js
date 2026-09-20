@@ -179,24 +179,30 @@ function updateHandCursor(owns) {
 }
 
 // ---------- 작품 설명 패널 자동 숨김 ----------
-const INFO_AUTO_HIDE = 4;   // 초 — 첫 프레임부터 rAF dt 누적(탭이 숨겨진 동안은 흐르지 않음)
+const INFO_AUTO_HIDE = 4;   // 초 — 첫 프레임부터 실제 경과 시간(real, 0.25s 캡) 누적(탭이 숨겨진 동안은 흐르지 않음)
+const HOVER_CAPABLE = matchMedia("(hover: hover)").matches;   // 터치 기기는 탭 뒤 :hover 가 고착될 수 있어 hover 규칙 제외
 const infoEl = $(".viewer__info"), infoToggle = $(".viewer__infotoggle");
-let infoT = 0, infoAutoDone = false;   // 작품마다 초기화 · 수동 토글/1회 숨김 후 true
+let infoT = 0, infoAutoDone = false;   // 작품마다 초기화 · 수동 토글/패널 클릭/1회 숨김 후 true
 
 function setInfoHidden(hidden) {
   infoEl.classList.toggle("is-hidden", hidden);
+  infoEl.inert = hidden;                                        // 숨긴 패널은 탭 순서·접근성 트리에서 제외
   infoToggle.setAttribute("aria-expanded", String(!hidden));
 }
 function resetInfoAutoHide() { infoT = 0; infoAutoDone = false; setInfoHidden(false); }
-function tickInfoAutoHide(dt) {
+// 실제 경과 시간(real) 기준 — 저fps 기기에서도 벽시계 4초. dt(0.05s 캡)를 쓰면 20fps 미만에서 4초가 늘어진다.
+// 호출 측이 0.25s로 캡해 탭 복귀 시 한 번에 점프하지 않는다.
+function tickInfoAutoHide(real) {
   if (infoAutoDone || infoEl.classList.contains("is-hidden")) return;
-  if (infoEl.matches(":hover")) return;                         // 읽는 중 — 기다린다
-  infoT += dt;
+  if (HOVER_CAPABLE && infoEl.matches(":hover")) return;        // 읽는 중 — 기다린다(hover 가능 기기만)
+  infoT += real;
   if (infoT < INFO_AUTO_HIDE) return;
   infoAutoDone = true;
-  if (infoEl.contains(document.activeElement)) infoToggle.focus();   // 포커스 유실 방지
+  if (infoEl.contains(document.activeElement)) infoToggle.focus();   // 포커스 유실 방지(inert 적용 전에 옮긴다)
   setInfoHidden(true);
 }
+// 패널 안 클릭(📷/🎤 버튼·터치 탭 포함)은 수동 의사 — 권한 대기·모델 로드 중에 패널이 사라지지 않도록 자동 숨김 종료
+infoEl.addEventListener("click", () => { infoAutoDone = true; });
 
 // ---------- 뷰어 ----------
 let piece = null;      // 현재 작품 모듈의 default export
@@ -233,6 +239,7 @@ async function openWork(idx) {
   // ←/→·prev/next 이동 후 닫아도 현재(마지막) 작품 카드로 포커스가 복원되도록 갱신
   lastCard = $(`.card[data-no="${work.no}"]`) || lastCard;
   body.dataset.view = "viewer";
+  resetInfoAutoHide();   // 로딩 중에도 패널은 보임·자동 숨김 대기 상태(init 성공 직후 다시 0으로 — 첫 프레임 기준)
   $("#viewer").setAttribute("aria-hidden", "false");
   document.documentElement.style.setProperty("--accent", wing.accent);
   $("#v-no").textContent = `No. ${work.no}`;
@@ -275,7 +282,7 @@ function frame(now) {
   lastT = now;
   snapshotPointer(dt);
   updateHandCursor(synthesizeHand(dt));   // 손이 보이면 이 프레임의 포인터는 손
-  tickInfoAutoHide(dt);
+  tickInfoAutoHide(Math.min(0.25, real));   // 실제 경과 기준(0.25s 캡) — 저fps 에서도 벽시계 4초
   try {
     piece.tick(dt, pointer, Math.min(0.25, real)); // 3번째: 실제 경과(초) — fps 독립 진행이 필요한 작품용
   } catch (err) {
@@ -311,7 +318,7 @@ $(".viewer__close").addEventListener("click", closeWork);
 $("#v-error button").addEventListener("click", closeWork);
 $(".viewer__nav--prev").addEventListener("click", () => step(-1));
 $(".viewer__nav--next").addEventListener("click", () => step(1));
-$(".viewer__infotoggle").addEventListener("click", () => {
+infoToggle.addEventListener("click", () => {
   setInfoHidden(!infoEl.classList.contains("is-hidden"));
   infoAutoDone = true;
 });

@@ -13,17 +13,20 @@
 
 | 상황 | 동작 |
 |---|---|
-| 작품 진입(openWork에서 init 성공 직후) | 패널을 보이게 하고 타이머 0으로 초기화, 자동 숨김 활성 |
-| 매 프레임(frame) | 패널이 보이고 자동 숨김이 활성이며, 마우스가 패널 위에 없으면 `infoT += dt` |
-| `infoT ≥ INFO_AUTO_HIDE(4)` | 패널 숨김(`is-hidden`), `aria-expanded=false`, 자동 숨김 종료(그 작품에서 1회) |
-| 숨길 때 포커스가 패널 안에 있음 | 먼저 ⓘ 토글로 포커스를 옮긴 뒤 숨긴다(포커스 유실 방지) |
-| 마우스가 패널 위(`:hover`) | 카운트 정지(누적 유지) |
-| ⓘ 토글 클릭 | 보임/숨김 전환 + `aria-expanded` 동기화 + 자동 숨김 종료(수동 의사 존중) |
+| 작품 진입(openWork 상단 `body.dataset.view = "viewer"` 직후 + init 성공 직후) | 패널을 보이게 하고 타이머 0으로 초기화, 자동 숨김 활성. 상단 호출로 로딩 중에도 패널이 보이고, init 직후 호출로 타이머가 첫 프레임 기준으로 다시 0 |
+| 매 프레임(frame) | 패널이 보이고 자동 숨김이 활성이며, (hover 가능 기기에서) 마우스가 패널 위에 없으면 `infoT += min(0.25, real)` — 실제 경과 초 |
+| `infoT ≥ INFO_AUTO_HIDE(4)` | 패널 숨김(`is-hidden` + `inert`), `aria-expanded=false`, 자동 숨김 종료(그 작품에서 1회) |
+| 숨길 때 포커스가 패널 안에 있음 | 먼저 ⓘ 토글로 포커스를 옮긴 뒤 숨긴다(포커스 유실 방지 — `inert` 적용 전) |
+| 숨김 상태 | `infoEl.inert = true` — 탭 순서·접근성 트리에서 제외(다시 보이면 `false`) |
+| 마우스가 패널 위(`:hover`) | `(hover: hover)` 기기에서만 카운트 정지(누적 유지). 터치 기기는 탭 뒤 `:hover` 고착을 피하기 위해 이 규칙 미적용 |
+| 패널 안 클릭(📷/🎤 버튼·터치 탭 포함) | 수동 의사 — 자동 숨김 종료(권한 대기·모델 로드 중 패널이 사라지지 않음) |
+| ⓘ 토글 클릭 | 보임/숨김 전환 + `aria-expanded`·`inert` 동기화 + 자동 숨김 종료(수동 의사 존중) |
 | 다른 작품으로 이동(←/→·prev/next) | openWork가 다시 초기화 → 다시 4초 규칙 |
 | 탭 숨김/백그라운드 | rAF가 멈추므로 시간이 흐르지 않음 |
 | prefers-reduced-motion | 전환 없이 즉시 숨김/표시 |
 
-- 시간은 셸의 rAF `dt`(프레임당 0.05s 캡) 누적으로 계산 — setTimeout 사용 안 함. 첫 프레임부터 4초.
+- 시간은 셸 `frame`의 **실제 경과 초 `real`** 을 프레임당 0.25s로 캡해 누적 — setTimeout 사용 안 함. 첫 프레임부터 벽시계 4초.
+  `dt`(0.05s 캡)를 쓰지 않는 이유: 20fps 미만 기기에서 4초가 늘어진다. 0.25s 캡은 탭 복귀 시 한 번에 점프하는 것을 막는다.
 - 카메라/마이크 버튼은 패널 안에 있으므로 함께 숨겨지며 ⓘ로 복귀. 카메라·마이크 상태는 영향 없음.
 
 ## CSS
@@ -37,28 +40,34 @@
 
 ```js
 // ---------- 작품 설명 패널 자동 숨김 ----------
-const INFO_AUTO_HIDE = 4;   // 초 — 첫 프레임부터 rAF dt 누적(탭이 숨겨진 동안은 흐르지 않음)
+const INFO_AUTO_HIDE = 4;   // 초 — 첫 프레임부터 실제 경과 시간(real, 0.25s 캡) 누적(탭이 숨겨진 동안은 흐르지 않음)
+const HOVER_CAPABLE = matchMedia("(hover: hover)").matches;   // 터치 기기는 탭 뒤 :hover 가 고착될 수 있어 hover 규칙 제외
 const infoEl = $(".viewer__info"), infoToggle = $(".viewer__infotoggle");
-let infoT = 0, infoAutoDone = false;   // 작품마다 초기화 · 수동 토글/1회 숨김 후 true
+let infoT = 0, infoAutoDone = false;   // 작품마다 초기화 · 수동 토글/패널 클릭/1회 숨김 후 true
 
 function setInfoHidden(hidden) {
   infoEl.classList.toggle("is-hidden", hidden);
+  infoEl.inert = hidden;                                        // 숨긴 패널은 탭 순서·접근성 트리에서 제외
   infoToggle.setAttribute("aria-expanded", String(!hidden));
 }
 function resetInfoAutoHide() { infoT = 0; infoAutoDone = false; setInfoHidden(false); }
-function tickInfoAutoHide(dt) {
+// 실제 경과 시간(real) 기준 — 저fps 기기에서도 벽시계 4초. dt(0.05s 캡)를 쓰면 20fps 미만에서 4초가 늘어진다.
+// 호출 측이 0.25s로 캡해 탭 복귀 시 한 번에 점프하지 않는다.
+function tickInfoAutoHide(real) {
   if (infoAutoDone || infoEl.classList.contains("is-hidden")) return;
-  if (infoEl.matches(":hover")) return;                         // 읽는 중 — 기다린다
-  infoT += dt;
+  if (HOVER_CAPABLE && infoEl.matches(":hover")) return;        // 읽는 중 — 기다린다(hover 가능 기기만)
+  infoT += real;
   if (infoT < INFO_AUTO_HIDE) return;
   infoAutoDone = true;
-  if (infoEl.contains(document.activeElement)) infoToggle.focus();   // 포커스 유실 방지
+  if (infoEl.contains(document.activeElement)) infoToggle.focus();   // 포커스 유실 방지(inert 적용 전에 옮긴다)
   setInfoHidden(true);
 }
+// 패널 안 클릭(📷/🎤 버튼·터치 탭 포함)은 수동 의사 — 권한 대기·모델 로드 중에 패널이 사라지지 않도록 자동 숨김 종료
+infoEl.addEventListener("click", () => { infoAutoDone = true; });
 ```
-- `openWork`: `piece.init(...)` 성공 직후 `resetInfoAutoHide();`
-- `frame(now)`: `updateHandCursor(synthesizeHand(dt));` 다음 줄에 `tickInfoAutoHide(dt);`
-- ⓘ 토글 리스너를 `setInfoHidden(!infoEl.classList.contains("is-hidden")); infoAutoDone = true;`로 교체.
+- `openWork`: 상단 `body.dataset.view = "viewer";` 직후 `resetInfoAutoHide();`(로딩 중 패널 보임) **그리고** `piece.init(...)` 성공 직후 다시 `resetInfoAutoHide();`(타이머를 첫 프레임 기준으로 0).
+- `frame(now)`: `updateHandCursor(synthesizeHand(dt));` 다음 줄에 `tickInfoAutoHide(Math.min(0.25, real));` — `real`은 frame에 이미 있는 실제 경과 초.
+- ⓘ 토글 리스너는 `infoToggle.addEventListener("click", ...)`(재조회 없이) 안에서 `setInfoHidden(!infoEl.classList.contains("is-hidden")); infoAutoDone = true;`.
 
 ## 검증(Playwright, 헤드리스 Chrome)
 
