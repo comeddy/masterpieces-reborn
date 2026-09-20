@@ -178,6 +178,26 @@ function updateHandCursor(owns) {
   handCursor.classList.toggle("is-down", pointer.down);
 }
 
+// ---------- 작품 설명 패널 자동 숨김 ----------
+const INFO_AUTO_HIDE = 4;   // 초 — 첫 프레임부터 rAF dt 누적(탭이 숨겨진 동안은 흐르지 않음)
+const infoEl = $(".viewer__info"), infoToggle = $(".viewer__infotoggle");
+let infoT = 0, infoAutoDone = false;   // 작품마다 초기화 · 수동 토글/1회 숨김 후 true
+
+function setInfoHidden(hidden) {
+  infoEl.classList.toggle("is-hidden", hidden);
+  infoToggle.setAttribute("aria-expanded", String(!hidden));
+}
+function resetInfoAutoHide() { infoT = 0; infoAutoDone = false; setInfoHidden(false); }
+function tickInfoAutoHide(dt) {
+  if (infoAutoDone || infoEl.classList.contains("is-hidden")) return;
+  if (infoEl.matches(":hover")) return;                         // 읽는 중 — 기다린다
+  infoT += dt;
+  if (infoT < INFO_AUTO_HIDE) return;
+  infoAutoDone = true;
+  if (infoEl.contains(document.activeElement)) infoToggle.focus();   // 포커스 유실 방지
+  setInfoHidden(true);
+}
+
 // ---------- 뷰어 ----------
 let piece = null;      // 현재 작품 모듈의 default export
 let current = -1;      // WORKS 인덱스
@@ -237,6 +257,7 @@ async function openWork(idx) {
                  cam: { active: () => cam.active(), hands: () => cam.hands(),
                         video: () => cam.video(), landmarks: () => cam.landmarks(),
                         drawMirror: (c, rect) => cam.drawMirror(c, rect) } });
+    resetInfoAutoHide();
     lastT = performance.now();
     pointer.downTime = 0;
     rafId = requestAnimationFrame(frame);
@@ -254,6 +275,7 @@ function frame(now) {
   lastT = now;
   snapshotPointer(dt);
   updateHandCursor(synthesizeHand(dt));   // 손이 보이면 이 프레임의 포인터는 손
+  tickInfoAutoHide(dt);
   try {
     piece.tick(dt, pointer, Math.min(0.25, real)); // 3번째: 실제 경과(초) — fps 독립 진행이 필요한 작품용
   } catch (err) {
@@ -289,10 +311,9 @@ $(".viewer__close").addEventListener("click", closeWork);
 $("#v-error button").addEventListener("click", closeWork);
 $(".viewer__nav--prev").addEventListener("click", () => step(-1));
 $(".viewer__nav--next").addEventListener("click", () => step(1));
-$(".viewer__infotoggle").addEventListener("click", (e) => {
-  const info = $(".viewer__info");
-  const hidden = info.classList.toggle("is-hidden");
-  e.currentTarget.setAttribute("aria-expanded", String(!hidden));
+$(".viewer__infotoggle").addEventListener("click", () => {
+  setInfoHidden(!infoEl.classList.contains("is-hidden"));
+  infoAutoDone = true;
 });
 addEventListener("keydown", (e) => {
   if (body.dataset.view !== "viewer") return;
