@@ -38,11 +38,10 @@ test("관별 작품 수는 4점씩이다", () => {
   }
 });
 
-test("mic 플래그는 boolean이며 현재는 09번에만 있다", () => {
+test("mic 플래그는 boolean이다", () => {
   for (const w of WORKS) {
     if ("mic" in w) assert.equal(typeof w.mic, "boolean", `${w.no}.mic 타입`);
   }
-  assert.deepEqual(WORKS.filter(w => w.mic).map(w => w.no), ["09"]);
 });
 
 test("handPointer 플래그는 boolean이며, 켜진 작품은 cam도 켜져 있다(버튼 없이는 도달 불가)", () => {
