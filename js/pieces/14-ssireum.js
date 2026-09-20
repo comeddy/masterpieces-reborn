@@ -11,9 +11,15 @@
 //    동시에 클릭 지점에서 방사형 환호 파동이 퍼져 도달한 구경꾼의 들썩임이 일시 증폭.
 //  · 드래그 = 파도응원: 커서가 지나간 구경꾼들이 순차로 크게 들썩인다.
 //  · 엿장수만은 어떤 파동에도 반응하지 않는다(무심함 — 제 리듬만).
+//  · 🎤 소리(마이크를 켠 경우): 지속되는 환호 크기만큼 구경꾼 전체의 들썩임 바닥값이 오르고
+//    씨름꾼의 힘겨루기도 거세진다. 박수·외침(순간 스파이크)엔 클릭과 같은 기술+환호 파동 —
+//    소리엔 위치가 없으므로 파동 중심은 씨름판 한가운데(씨름꾼 피벗). 엿장수는 소리에도 무심.
 //
-// 규약: dt·pointer만 사용. addEventListener/rAF/타이머/시계 API 없음.
+// 규약: dt·pointer만 사용. 마이크는 opts.audio.mic getter(active/level) 폴링만.
+// addEventListener/rAF/타이머/시계 API 없음.
 // document는 오프스크린 캔버스 생성에만 사용. 좌표는 CSS px.
+
+import { makeSoundState, soundStep } from "../sound-gesture.js";
 
 let ctx = null, W = 0, H = 0, T = 0, reduced = false;
 let img = null;                       // 원작 (없으면 null → 절차적 폴백)
@@ -81,6 +87,11 @@ let pressMoved = false;               // 이번 누름이 드래그로 바뀌었
 let tech = -1;                        // 씨름꾼 기술 진행 시간(초). <0 = 비활성
 const TECH_DUR = 1.2;                 // 들배지기 지속(초) — 웅크림→들기→안착
 const PUP_PAD = 42;                   // 인형 타일 여백(가위 단면·그림자 블러 여유, 소스 px)
+
+// 🎤 마이크 getter(없으면 null) · 소리 헬퍼 상태 · 이번 프레임 결과 { energy, onset, strength }
+let mic = null, snd = makeSoundState(), sound = { energy: 0, onset: false, strength: 0 };
+let soundE = 0;                       // 이번 프레임 소리 진폭 세기(0..1): reduced 면 절반, 미세 잔류값은 0
+const SOUND_EPS = 0.01;               // 이 아래 energy 는 0 취급(감쇠 꼬리가 exc 바닥을 영구히 받치지 않도록)
 
 function makeCanvas(w, h) {
   const c = document.createElement("canvas");
@@ -487,9 +498,10 @@ function drawStickShadows(rock, lift, L, rise) {
 function drawPuppet() {
   if (!puppet) return;
   const p = puppet, half = reduced ? 0.45 : 1;
+  const surge = 1 + 0.6 * soundE;               // 🎤 지속음: 힘겨루기가 거세진다(유휴 rock/bob 진폭만, 기술 모션엔 미적용)
   // 유휴: 두 리듬을 겹친 회전·상하(막대 위에서 서로 밀고 당기는 느낌)
-  let rock = (0.020 * Math.sin(T * 0.9 + p.ph1) + 0.012 * Math.sin(T * 1.7 + p.ph2)) * half;
-  let bob = (2.0 * Math.sin(T * 1.3 + p.ph2) + 1.1 * Math.sin(T * 2.3)) * half;
+  let rock = (0.020 * Math.sin(T * 0.9 + p.ph1) + 0.012 * Math.sin(T * 1.7 + p.ph2)) * half * surge;
+  let bob = (2.0 * Math.sin(T * 1.3 + p.ph2) + 1.1 * Math.sin(T * 2.3)) * half * surge;
   let up = 0;
   if (tech >= 0) {
     const tm = reduced ? 0.5 : 1;
@@ -547,6 +559,15 @@ function propagate(cdt) {
   }
 }
 
+// 탭·소리 스파이크 공용: 씨름꾼 들배지기 시작 + (x,y) 중심 방사형 환호 파동(최대 6개 유지)
+function cheer(x, y) {
+  tech = 0;                                       // 씨름꾼 들배지기 시작
+  waves.push({ x, y, el: 0,
+               speed: Math.hypot(W, H) * 0.42, maxR: Math.hypot(W, H) * 0.95,
+               strength: reduced ? 0.6 : 1 });
+  if (waves.length > 6) waves.shift();
+}
+
 // 드래그 = 파도응원: 커서 근방 인물을 순차로 크게 들썩이게
 function surf(px, py) {
   const R = Math.min(W, H) * 0.16;
@@ -602,9 +623,17 @@ export default {
     A = makeCanvas(W, H); actx = A.getContext("2d");
     computeFit(); buildBase(); buildFigures(); buildPuppet();
     waves = []; pressMoved = false; tech = -1;
+    // 🎤 마이크 getter 는 셸이 opts.audio.mic 로 넘긴다(없으면 null) — 소리 상태 초기화
+    mic = (opts.audio && opts.audio.mic) || null;
+    snd = makeSoundState(); sound = { energy: 0, onset: false, strength: 0 }; soundE = 0;
   },
 
   tick(dt, ptr) {
+    // 🎤 소리 스텝(폴링만): 마이크 비활성이면 0으로 스텝 → energy 자연 감쇠·onset 없음 → 기존 동작과 동일
+    sound = soundStep(mic && mic.active() ? mic.level() : 0, dt, snd);
+    soundE = sound.energy * (reduced ? 0.5 : 1);      // reducedMotion: 소리 진폭 계수 절반
+    if (soundE < SOUND_EPS) soundE = 0;
+
     const cdt = Math.min(dt, 0.05);
     T += cdt;
 
@@ -613,20 +642,25 @@ export default {
       if (ptr.justDown) pressMoved = false;
       const speed = Math.hypot(ptr.dx, ptr.dy);
       if (ptr.down && speed > 1.8) { pressMoved = true; surf(ptr.x, ptr.y); }
-      if (ptr.justUp && !pressMoved) {
-        tech = 0;                                   // 씨름꾼 들배지기 시작
-        waves.push({ x: ptr.x, y: ptr.y, el: 0,
-                     speed: Math.hypot(W, H) * 0.42, maxR: Math.hypot(W, H) * 0.95,
-                     strength: reduced ? 0.6 : 1 });
-        if (waves.length > 6) waves.shift();
-      }
+      if (ptr.justUp && !pressMoved) cheer(ptr.x, ptr.y);   // 탭: 기술 + 클릭 지점에서 환호 파동
     }
+
+    // 🎤 박수·외침(스파이크): 클릭과 같은 기술+환호 파동. 기술이 진행 중이면 무시 — tech=0 재진입 시
+    //    techLift 가 불연속으로 튀는 것을 막고, 잦은 스파이크로 파문 링이 겹쳐 쌓이는 것도 억제.
+    //    소리엔 위치가 없으므로 중심은 씨름꾼 피벗(씨름판 한가운데) — 승부 → 환호가 밖으로 번지는 서사.
+    if (sound.onset && tech < 0 && puppet) cheer(puppet.pivotX, puppet.pivotY);
 
     // 기술 진행 / 파동 전파 / 흥분 감쇠
     if (tech >= 0) { tech += cdt; if (tech > TECH_DUR) tech = -1; }
     propagate(cdt);
     const decay = Math.exp(-cdt / 0.55);
     for (const f of figs) if (f.exc > 0) { f.exc *= decay; if (f.exc < 0.002) f.exc = 0; }
+    // 🎤 지속음(환호) → 구경꾼 웅성거림 바닥값: 감쇠 뒤에 max 로만 받친다(덧셈 금지 — cap 2.2 포화 방지).
+    //    소리가 있는 동안만 바닥이 유지되고 멎으면 기존 τ0.55s 감쇠로 돌아간다. 엿장수는 소리에도 무심.
+    if (soundE > 0) {
+      const hum = 1.2 * soundE;
+      for (const f of figs) if (f.r.kind !== "vendor") f.exc = Math.max(f.exc, hum);
+    }
 
     // 렌더: 배경(한지+원작) → 구경꾼 → 씨름꾼 종이 인형(그림자+본체, 맨 위) → 파문
     ctx.globalCompositeOperation = "source-over";
@@ -647,5 +681,6 @@ export default {
   dispose() {
     ctx = null; actx = null; A = null; img = null;
     figs = []; waves = []; puppet = null;
+    mic = null; soundE = 0;                       // 마이크 getter 해제
   },
 };

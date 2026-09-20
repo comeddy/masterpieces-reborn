@@ -4,9 +4,12 @@
 // 아주 느리게 차고 기울며 장면의 밝기·색온을 바꾸고, 연인 곁 초롱불이 따뜻하게 명멸한다.
 // 커서는 구름이 되어 lerp로 따라오다 달과 겹치면 달빛 성분이 스러지고 — 초롱불 하나만
 // 남은 어둠 속에서 연인은 서로에게 미세하게 기운다. 클릭하면 초롱불이 한 번 크게 깜빡인다.
+// 🎤 소리: "후—" 바람 소리(지속음)가 구름을 달 쪽으로 밀어 밤을 깊게 하고, 박수·외침(스파이크)이 초롱불을 깜빡인다.
 //
-// 규약: dt·pointer만 사용. addEventListener/rAF/타이머/시계 API 없음.
+// 규약: dt·pointer만 사용. addEventListener/rAF/타이머/시계 API 없음. 마이크는 opts.audio.mic getter 폴링만.
 // document는 오프스크린 캔버스 생성에만 사용. 좌표는 CSS px. assets.target 없으면 절차적 폴백.
+
+import { makeSoundState, soundStep } from "../sound-gesture.js";
 
 let ctx = null, W = 0, H = 0, T = 0, reduced = false;
 let img = null;                         // 원작 (없으면 null → 절차적 폴백)
@@ -30,8 +33,14 @@ let lanternPulse = 0;                    // 클릭 깜빡임 잔여(초)
 
 // ---- 구름(커서) ----
 let cx = 0, cy = 0;                      // lerp 추종 구름 중심
-let cloudR = 0;                          // 구름 반경(px)
+let cloudR = 0;                          // 구름 반경(px, 기준값 — 바람 배율 gust 를 곱해 쓴다)
 let seeded = false;                      // 첫 프레임에 커서로 순간이동 방지
+let soundMoved = false;                  // 소리로 구름을 움직인 뒤인가 — 소리가 멎으면 초기 위치로 돌아오게(커서 진입 시 해제)
+let gust = 1;                            // 이번 프레임 바람 배율 1 + 0.4·wind — 구름 반경·요동에 곱한다
+
+// ---- 🎤 소리 ----
+// 마이크 getter(없으면 null) · 소리 헬퍼 상태 · 이번 프레임 결과 { energy, onset, strength }
+let mic = null, snd = makeSoundState(), sound = { energy: 0, onset: false, strength: 0 };
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (t) => { t = clamp01(t); return t * t * (3 - 2 * t); };
@@ -186,15 +195,16 @@ function leanCrop(cp, dir, dark, breath) {
 
 // 부드러운 구름(여러 겹 방사형 블롭). 달을 가리면 어둠이 내린다.
 function drawCloud() {
-  const churn = reduced ? 0.25 : 1;
+  const churn = (reduced ? 0.25 : 1) * gust;   // 바람이 불면 요동 진폭 ×(1+0.4·wind)
+  const R = cloudR * gust;                      // 바람이 불면 구름 반경 ×(1+0.4·wind)
   ctx.globalCompositeOperation = "source-over";
   const blobs = 7;
   for (let i = 0; i < blobs; i++) {
     const a = (i / blobs) * 6.283;
-    const wob = Math.sin(T * 0.6 + i * 1.7) * cloudR * 0.16 * churn;
-    const bx = cx + Math.cos(a) * cloudR * 0.5 + Math.sin(T * 0.4 + i) * cloudR * 0.1 * churn;
-    const by = cy + Math.sin(a) * cloudR * 0.34 + wob;
-    const br = cloudR * (0.5 + 0.18 * Math.sin(i * 2.1));
+    const wob = Math.sin(T * 0.6 + i * 1.7) * R * 0.16 * churn;
+    const bx = cx + Math.cos(a) * R * 0.5 + Math.sin(T * 0.4 + i) * R * 0.1 * churn;
+    const by = cy + Math.sin(a) * R * 0.34 + wob;
+    const br = R * (0.5 + 0.18 * Math.sin(i * 2.1));
     const gr = ctx.createRadialGradient(bx, by, 0, bx, by, br);
     gr.addColorStop(0, "rgba(38,42,58,0.52)");
     gr.addColorStop(1, "rgba(38,42,58,0)");
@@ -212,29 +222,47 @@ export default {
     computeFit(); buildBase(); sizeMoon(); bakeMoon();
     cloudR = Math.min(W, H) * 0.19;
     cx = W * 0.5; cy = H * 0.86;          // 시작 구름은 달에서 멀리 → 첫 화면은 밝은 밤
-    seeded = false;
+    seeded = false; gust = 1; soundMoved = false;
     moonlight = 0.85; lanternPulse = 0;
+    // 소리 상태 초기화(마이크 getter 는 셸이 opts.audio.mic 로 넘긴다 — 없으면 null)
+    mic = (opts.audio && opts.audio.mic) || null;
+    snd = makeSoundState(); sound = { energy: 0, onset: false, strength: 0 };
   },
 
   tick(dt, ptr) {
     const cdt = Math.min(dt, 0.05);
     T += cdt;
 
-    // 구름이 커서를 부드럽게 추종(lerp 0.09 @60fps, dt 보정)
-    if (ptr && ptr.inside) {
-      if (!seeded) { cx = ptr.x; cy = ptr.y; seeded = true; }
-      const a = 1 - Math.pow(1 - 0.09, cdt * 60);
-      cx += (ptr.x - cx) * a;
-      cy += (ptr.y - cy) * a;
-    }
+    // 🎤 소리 스텝(폴링만): 마이크 비활성이면 0으로 스텝 → energy 자연 감쇠, onset 없음 → 기존 동작과 동일
+    sound = soundStep(mic && mic.active() ? mic.level() : 0, cdt, snd);
+    // 08/14 와 동일한 EPS 처리: energy 0.01 미만은 0 으로 간주(마이크를 끈 뒤 감쇠 꼬리가 구름을 영구히 당기지 않도록)
+    const e = sound.energy < 0.01 ? 0 : sound.energy;
+    const wind = e * (reduced ? 0.5 : 1);              // 바람 세기(0..1): reduced 면 절반
+    gust = 1 + 0.4 * wind;                             // 구름 반경·요동 배율은 기존 wind 그대로
+    // 구름 당김 포화 곡선: pull = min(1, wind·1.8) → energy ≈0.56 이면 달에 완전 도달(reduced 는 wind 절반이라 최대 0.9 — 리뷰 반영 2026-09-20)
+    const pull = Math.min(1, wind * 1.8);
+
+    // 구름 목표를 하나로 합산해 한 번만 lerp(0.09 @60fps, dt 보정)
+    //   기본 목표 = 커서(inside) 또는 현재 위치(커서가 떠나면 머무름 — 기존과 동일)
+    //   최종 목표 = 기본 목표에서 달 쪽으로 pull(=min(1, wind·1.8)) 만큼 끌려간 점 → wind 0 이면 기존 추종식과 동치
+    const inside = !!(ptr && ptr.inside);
+    if (inside && !seeded) { cx = ptr.x; cy = ptr.y; seeded = true; }
+    if (wind > 0.05) { seeded = true; soundMoved = true; }   // 소리로 움직이기 시작하면 이후 첫 커서 프레임의 순간이동 방지
+    if (inside) soundMoved = false;      // 커서가 들어오면 커서가 구름을 맡는다(마우스 동작은 기존과 동일)
+    // 기본 목표: 커서 안이면 커서, 밖이면 — 소리로 움직인 뒤라면 초기 위치(소리가 멎으면 구름이 물러나 달빛 회복), 아니면 현재 위치(기존 동작)
+    const bx = inside ? ptr.x : (soundMoved ? W * 0.5 : cx), by = inside ? ptr.y : (soundMoved ? H * 0.86 : cy);
+    const tx = lerp(bx, px(MOON.x), pull), ty = lerp(by, py(MOON.y), pull);
+    const a = 1 - Math.pow(1 - 0.09, cdt * 60);
+    cx += (tx - cx) * a;
+    cy += (ty - cy) * a;
 
     // 달 위상: 아주 느리게 차고 기욺 → 기본 달빛·색온
     const phase = 0.5 + 0.5 * Math.sin(T * MOON_W + MOON_PHASE0);
     const moonBase = 0.45 + 0.55 * phase;      // 0.45..1.0
 
-    // 구름-달 겹침 → 가림량(0..1). 구름 중심이 달에 가까울수록 1
+    // 구름-달 겹침 → 가림량(0..1). 구름 중심이 달에 가까울수록 1(바람에 커진 반경 기준)
     const d = Math.hypot(cx - px(MOON.x), cy - py(MOON.y));
-    const cover = smooth(1 - d / cloudR);
+    const cover = smooth(1 - d / (cloudR * gust));
 
     // 실효 달빛: 목표값으로 부드럽게 수렴(걷히면 서서히 복귀)
     const target = moonBase * (1 - cover);
@@ -243,8 +271,8 @@ export default {
     const ml = clamp01(moonlight);
     const dark = 1 - ml;
 
-    // 클릭 = 초롱불 한 번 크게 깜빡임
-    if (ptr && ptr.justDown && ptr.inside) lanternPulse = 0.5;
+    // 클릭 = 초롱불 한 번 크게 깜빡임. 소리 스파이크(박수·외침)도 같은 효과 — 연발은 헬퍼 쿨다운(0.5s)이 억제
+    if ((ptr && ptr.justDown && ptr.inside) || sound.onset) lanternPulse = 0.5;
     if (lanternPulse > 0) lanternPulse = Math.max(0, lanternPulse - cdt);
 
     render(ml, dark, phase);
@@ -261,6 +289,7 @@ export default {
   dispose() {
     ctx = null; actx = null; mctx = null;
     A = null; M = null; img = null;
+    mic = null;                           // 마이크 getter 해제
   },
 };
 

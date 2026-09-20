@@ -19,7 +19,7 @@ $(".sound-toggle").addEventListener("click", (e) => {
 
 // ---------- 마이크 (mic: true 작품에서만 버튼 노출) ----------
 const micBtn = $("#v-mic");
-const MIC_LABEL = "🎤 소리로 생명 불어넣기";
+const MIC_LABEL = "🎤 소리로 체험하기";
 function resetMicBtn() {
   micBtn.setAttribute("aria-pressed", "false");
   micBtn.disabled = false;
@@ -37,8 +37,8 @@ micBtn.addEventListener("click", async () => {
     micBtn.setAttribute("aria-pressed", "true");
     micBtn.textContent = "🎤 듣는 중 — 소리를 내보세요";
   } else {
-    micBtn.disabled = true; // 권한 거부/미지원: 커서 폴백 안내
-    micBtn.textContent = "마이크를 사용할 수 없어요 — 커서로 체험하세요";
+    micBtn.disabled = true; // 권한 거부/미지원: 마우스 폴백 안내
+    micBtn.textContent = "마이크를 사용할 수 없어요 — 마우스로 체험하세요";
   }
 });
 
