@@ -121,7 +121,8 @@ test("응집 안무: 바깥 입자가 먼저 도착하고 얼굴 입자가 마�
 });
 
 // ── 순수 샘플러: 밀도 필드·특징 보존·중복 없음 ────────────────────────
-import { FACE_BOOST, MOUTH_BOOST, samplePixels } from "../js/pieces/04-mona-lisa.js";
+import { DENSITY_MAX, DENSITY_FLOOR, DENSITY_TOTAL, EDGE_NORM, W_BRIGHT, W_EDGE, FEATURE_EDGE, DENS_BUCKETS, densBucket, skinness,
+  importanceOf, solveK, samplePixels } from "../js/pieces/04-mona-lisa.js";
 
 // 결정적 의사난수 (LCG) — 테스트 재현성
 const lcg = (seed) => () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
@@ -137,47 +138,60 @@ function makeImage(iw, ih, paint) {
   return data;
 }
 
-test("samplePixels: 얼굴 중심 밀도 ≈ FACE_BOOST배, 바깥은 1배, 총량은 count + 얼굴 추가분", () => {
+test("samplePixels: 피부빛이 아닌 균일 이미지에서는 얼굴 안팎 밀도가 같다(기하만으로는 올리지 않음), 총량은 count·DENSITY_TOTAL", () => {
   const iw = 480, ih = 716, count = 6000;
-  const pts = samplePixels(makeImage(iw, ih), iw, ih, count, lcg(1));
-  // 화소당 기준 밀도 = count/(iw*ih). 얼굴 타원 안쪽 절반(d<0.5)과 얼굴에서 먼 하단(v>0.7) 비교
-  const base = count / (iw * ih);
-  let inCore = 0, inBottom = 0;
-  for (const q of pts) {
-    if (faceDist(q.u, q.v) < 0.5) inCore++;
-    if (q.v > 0.7) inBottom++;
+  const pts = samplePixels(makeImage(iw, ih, () => [150, 162, 156]), iw, ih, count, lcg(1)); // 청록 회색(skinness 0)
+  let inCore = 0, inBottom = 0, aCore = 0, aBottom = 0;
+  for (let y = 0; y < ih; y += 2) for (let x = 0; x < iw; x += 2) {
+    const u = (x + 0.5) / iw, v = (y + 0.5) / ih;
+    if (faceDist(u, v) < 0.9) aCore += 4; else if (v > 0.7) aBottom += 4;
   }
-  const coreArea = Math.PI * (0.5 * FACE_OVAL.ru * iw) * (0.5 * FACE_OVAL.rv * ih);
-  const bottomArea = iw * ih * 0.3;
-  const coreRatio = inCore / (coreArea * base), bottomRatio = inBottom / (bottomArea * base);
-  assert.ok(Math.abs(bottomRatio - 1) < 0.12, `바깥 밀도 배율 ${bottomRatio.toFixed(2)} ≠ 1`);
-  assert.ok(Math.abs(coreRatio - FACE_BOOST) < 0.25 * FACE_BOOST, `얼굴 중심 밀도 배율 ${coreRatio.toFixed(2)} ≠ ${FACE_BOOST}`);
-  assert.ok(pts.length > count && pts.length < count * 1.5, `총량 ${pts.length}`);
+  for (const q of pts) { if (faceDist(q.u, q.v) < 0.9) inCore++; else if (q.v > 0.7) inBottom++; }
+  const ratio = (inCore / aCore) / (inBottom / aBottom);
+  assert.ok(Math.abs(ratio - 1) < 0.12, `얼굴/바깥 밀도 비 ${ratio.toFixed(2)} ≠ 1`);
+  assert.ok(Math.abs(pts.length / (count * DENSITY_TOTAL) - 1) < 0.08, `총량 ${pts.length} ≠ ${count * DENSITY_TOTAL}`);
+  for (const q of pts) assert.ok(q.dens > 0 && q.dens <= DENSITY_MAX + 1e-9, `dens 범위 밖 ${q.dens}`);
 });
 
-test("samplePixels: 얼굴 필드 밀도는 감쇠 대역을 지나며 연속으로 1배에 수렴한다(단차 없음)", () => {
-  const iw = 480, ih = 716, count = 8000;
-  const pts = samplePixels(makeImage(iw, ih), iw, ih, count, lcg(2));
-  // d 구간별 밀도 배율: [0.8,1.0) 안쪽 · [1.15,1.45) 대역 중간 · [1.7,2.0) 바깥
-  const bins = [[0.8, 1.0, 0], [1.15, 1.45, 0], [1.7, 2.0, 0]];
-  for (const q of pts) {
-    const d = faceDist(q.u, q.v);
-    for (const b of bins) if (d >= b[0] && d < b[1]) b[2]++;
-  }
-  // 고리 면적은 이미지 안에 실제로 놓인 픽셀 수로 센다 (d≈2.0 고리는 위쪽 경계를 벗어난다)
-  const ring = (a, b) => {
-    let n = 0;
-    for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) {
-      const d = faceDist((x + 0.5) / iw, (y + 0.5) / ih);
-      if (d >= a && d < b) n++;
-    }
-    return n;
-  };
-  const base = count / (iw * ih);
-  const r = bins.map((b) => b[2] / (ring(b[0], b[1]) * base));
-  assert.ok(r[0] > r[1] && r[1] > r[2], `밀도 단조 위반 ${r.map((x) => x.toFixed(2))}`);
-  assert.ok(r[1] > 1.15 && r[1] < FACE_BOOST - 0.15, `대역 중간이 중간값이어야 함 ${r[1].toFixed(2)}`);
-  assert.ok(Math.abs(r[2] - 1) < 0.15, `바깥 ${r[2].toFixed(2)} ≠ 1`);
+test("samplePixels: 피부빛 균일 이미지에서는 얼굴 타원 안만 촘촘하고, 타원 바깥 고리는 기본 밀도(고리 없음)", () => {
+  const iw = 480, ih = 716, count = 6000;
+  const pts = samplePixels(makeImage(iw, ih), iw, ih, count, lcg(3)); // 기본색 (180,160,130) = 피부빛
+  const ring = (a, b) => { let n = 0; for (let y = 0; y < ih; y++) for (let x = 0; x < iw; x++) { const d = faceDist((x + 0.5) / iw, (y + 0.5) / ih); if (d >= a && d < b) n++; } return n; };
+  const cnt = (a, b) => pts.filter((q) => { const d = faceDist(q.u, q.v); return d >= a && d < b; }).length;
+  const dIn = cnt(0, 0.9) / ring(0, 0.9), dOut = cnt(1 + FACE_FADE + 0.1, 1 + FACE_FADE + 0.6) / ring(1 + FACE_FADE + 0.1, 1 + FACE_FADE + 0.6);
+  const dFar = pts.filter((q) => q.v > 0.7).length / (iw * ih * 0.3);
+  assert.ok(dIn / dFar > 1.3, `얼굴 안 밀도 배율 ${(dIn / dFar).toFixed(2)} — 피부 항이 작동해야 함`);
+  assert.ok(Math.abs(dOut / dFar - 1) < 0.12, `타원 바깥 고리 밀도 배율 ${(dOut / dFar).toFixed(2)} ≠ 1 — 고리가 생김`);
+});
+
+test("samplePixels: 밀도는 밝기를 따른다 — 밝은 반쪽이 어두운 반쪽보다 촘촘, 어두운 쪽도 하한 유지", () => {
+  const iw = 480, ih = 716, count = 6000;
+  const data = makeImage(iw, ih, (x, y) => (y < ih / 2 ? [220, 200, 170] : [40, 32, 26]));
+  const pts = samplePixels(data, iw, ih, count, lcg(2));
+  // 경계선(y=ih/2) 주변 ±8px 은 경계 항이 끼므로 제외
+  const top = pts.filter((q) => q.v * ih < ih / 2 - 8).length, bot = pts.filter((q) => q.v * ih > ih / 2 + 8).length;
+  const base = count / (iw * ih) * (iw * (ih / 2 - 8));   // 반쪽 면적의 기본 격자 점 수
+  const rTop = top / base, rBot = bot / base;
+  assert.ok(rTop / rBot >= 2.5, `밝은/어두운 밀도 비 ${(rTop / rBot).toFixed(2)} < 2.5`);
+  assert.ok(rBot >= DENSITY_FLOOR * DENSITY_MAX * 0.8, `어두운 쪽 밀도 ${rBot.toFixed(2)} 가 하한 ${(DENSITY_FLOOR * DENSITY_MAX).toFixed(2)} 아래`);
+  assert.ok(rTop <= DENSITY_MAX + 0.05, `밝은 쪽 밀도 ${rTop.toFixed(2)} 가 상한 초과`);
+  // dens 필드는 실제 밀도와 같은 방향
+  const dTop = pts.filter((q) => q.v * ih < ih / 2 - 8).reduce((a, q) => a + q.dens, 0) / top;
+  const dBot = pts.filter((q) => q.v * ih > ih / 2 + 8).reduce((a, q) => a + q.dens, 0) / bot;
+  assert.ok(dTop > dBot);
+});
+
+test("importanceOf/solveK: 중요도는 밝기·명암폭에 단조, K 는 총량을 1% 안에서 맞춘다", () => {
+  assert.ok(importanceOf(0.9, 0) > importanceOf(0.5, 0) && importanceOf(0.5, 0) > importanceOf(0.1, 0));
+  assert.ok(importanceOf(0.5, 50) > importanceOf(0.5, 10));
+  assert.ok(Math.abs(importanceOf(1, EDGE_NORM * 5) - (W_BRIGHT + W_EDGE)) < 1e-12, "경계 항은 EDGE_NORM 에서 포화");
+  const r = lcg(9); const imps = Array.from({ length: 5000 }, () => importanceOf(r(), r() * 80));
+  const target = 2400;
+  const K = solveK(imps, target);
+  const got = imps.reduce((a, v) => a + Math.min(1, DENSITY_FLOOR + K * v), 0);
+  assert.ok(Math.abs(got - target) / target < 0.01, `기대 총량 ${got.toFixed(1)} ≠ ${target}`);
+  // 모두 채택해도 모자라면 상한 K
+  assert.equal(solveK([0.01, 0.02], 10), 8);
 });
 
 test("samplePixels: 얼굴 안 가느다란 어두운 선(입술선)이 점으로 살아남고, 바깥 지터 셀은 원색을 쓴다", () => {
@@ -186,13 +200,12 @@ test("samplePixels: 얼굴 안 가느다란 어두운 선(입술선)이 점으�
   const yLine = Math.round(FACE_OVAL.cv * ih), xa = Math.round((FACE_OVAL.cu - 0.06) * iw), xb = Math.round((FACE_OVAL.cu + 0.06) * iw);
   const data = makeImage(iw, ih, (x, y) => (Math.abs(y - yLine) <= 1 && x >= xa && x <= xb) ? [40, 30, 25] : null);
   const pts = samplePixels(data, iw, ih, count, lcg(3));
-  const step = Math.sqrt((iw * ih) / count);            // ≈7.6px → 선을 가로지르는 셀 ≈ (xb-xa)/step
+  const fstep = Math.sqrt((iw * ih) / count) / Math.sqrt(DENSITY_MAX); // 미세 격자 ≈4.5px → 선을 가로지르는 셀 ≈ (xb-xa)/fstep
   const onLine = pts.filter((q) => Math.abs(q.v * ih - yLine) <= 1.5 && q.u * iw >= xa - 1 && q.u * iw <= xb + 1);
-  const expectCells = (xb - xa) / step;
-  assert.ok(onLine.length >= expectCells * 0.8, `선 위 점 ${onLine.length} < 셀 수 ${expectCells.toFixed(1)}의 80%`);
+  const expectCells = (xb - xa) / fstep;
+  // 선이 지나는 셀은 경계 항으로 채택 확률이 높고(≈1) 특징 스냅이 선을 잡는다 → 셀 수의 70% 이상
+  assert.ok(onLine.length >= expectCells * 0.7, `선 위 점 ${onLine.length} < 셀 수 ${expectCells.toFixed(1)}의 70%`);
   for (const q of onLine) assert.ok(0.3 * q.r + 0.59 * q.g + 0.11 * q.b < 120, `선 위 점이 어둡지 않다 ${q.r},${q.g},${q.b}`);
-  // 무작위 지터라면 3px 선을 7.6px 셀이 맞출 확률 ≈ 3/7.6 → 최암점 채택이 그보다 뚜렷히 많아야 함
-  assert.ok(onLine.length > expectCells * 3 / step * 1.5);
   const far = pts.filter((q) => q.v > 0.7);
   assert.ok(far.every((q) => q.r === 180 && q.g === 160 && q.b === 130), "바깥 점은 원색 그대로");
 });
@@ -216,22 +229,55 @@ test("samplePixels: 평탄한 얼굴 셀은 최암점(셀 좌상단)으로 몰�
   assert.ok(sd > 0.2, `셀 내 오프셋 표준편차 ${sd.toFixed(3)} — 균등(≈0.29)이어야 하며 스냅(≈0)이면 실패`);
 });
 
-test("samplePixels: 입 중심 밀도 ≈ MOUTH_BOOST배, 입 서브필드 밖 얼굴은 FACE_BOOST배로 수렴", () => {
-  const iw = 960, ih = 1431, count = 12000;
-  const pts = samplePixels(makeImage(iw, ih), iw, ih, count, lcg(6));
-  const base = count / (iw * ih);
-  // 입 타원 안(md<1)과, 입 서브필드 밖이면서 얼굴 타원 안인 고리(md>2.2 && d<0.9) 비교 — 면적은 픽셀 수로
-  let inMouth = 0, inFaceOnly = 0, aMouth = 0, aFaceOnly = 0;
-  for (let y = 0; y < ih; y += 2) for (let x = 0; x < iw; x += 2) {
-    const u = (x + 0.5) / iw, v = (y + 0.5) / ih;
-    if (mouthDist(u, v) < 1) aMouth += 4;
-    else if (mouthDist(u, v) > 1 + MOUTH_FADE + 0.4 && faceDist(u, v) < 0.9) aFaceOnly += 4;
-  }
-  for (const q of pts) {
-    if (mouthDist(q.u, q.v) < 1) inMouth++;
-    else if (mouthDist(q.u, q.v) > 1 + MOUTH_FADE + 0.4 && faceDist(q.u, q.v) < 0.9) inFaceOnly++;
-  }
-  const rMouth = inMouth / (aMouth * base), rFace = inFaceOnly / (aFaceOnly * base);
-  assert.ok(Math.abs(rFace - FACE_BOOST) < 0.25 * FACE_BOOST, `얼굴(입 밖) 배율 ${rFace.toFixed(2)} ≠ ${FACE_BOOST}`);
-  assert.ok(Math.abs(rMouth - MOUTH_BOOST) < 0.25 * MOUTH_BOOST, `입 배율 ${rMouth.toFixed(2)} ≠ ${MOUTH_BOOST}`);
+test("densBucket: 가장 가까운 밀도 버킷을 고른다", () => {
+  assert.equal(densBucket(0.5), 0);
+  assert.equal(densBucket(1.1), 1);
+  assert.equal(densBucket(1.6), 2);
+  assert.equal(densBucket(2.8), 3);
+  assert.equal(DENS_BUCKETS.length, 4);
+});
+
+test("skinness: 피부빛(따뜻·밝음)은 1에 가깝고 하늘(청록)·머리카락(어두움)은 0", () => {
+  assert.ok(skinness(206, 176, 140) > 0.9, "밝은 피부");
+  assert.ok(skinness(150, 120, 92) > 0.5, "그늘진 피부");
+  assert.equal(skinness(120, 140, 130), 0, "청록 하늘");
+  assert.equal(skinness(58, 40, 28), 0, "어두운 머리카락");
+  assert.equal(skinness(48, 35, 25), 0, "드레스");
+});
+
+// ── 카메라 손짓: 셸 합성 포인터 방식 ──────────────────────────────────
+import { WORKS } from "../js/data.js";
+import { handStir, handSpeedGain, handMotion, HAND_STILL, HAND_SPEED_MIN, HAND_SPEED_FULL } from "../js/pieces/04-mona-lisa.js";
+
+test("04번은 카메라 손 합성 포인터 작품이다 (cam·handPointer·camHands 1) — 힌트에 📷와 마우스 대응 명시", () => {
+  const w = WORKS.find((x) => x.no === "04");
+  assert.equal(w.cam, true); assert.equal(w.handPointer, true); assert.equal(w.camHands, 1);
+  assert.ok(w.hint.includes("📷") && w.hint.includes("마우스"), w.hint);
+  assert.ok(w.note.includes("카메라"), "note에 카메라 문장");
+});
+
+test("handStir: 펼침 문턱(0.5) 이하 0.35, 활짝(1) 1, 사이 단조 증가, 비정상 입력은 1", () => {
+  assert.ok(Math.abs(handStir(0.5) - 0.35) < 1e-12);
+  assert.ok(Math.abs(handStir(0) - 0.35) < 1e-12);
+  assert.equal(handStir(1), 1);
+  assert.ok(handStir(0.75) > handStir(0.6) && handStir(0.6) > handStir(0.5));
+  assert.equal(handStir(NaN), 1); assert.equal(handStir(undefined), 1);
+});
+
+test("handSpeedGain: 멈춘 손 HAND_STILL, 빠른 손 1, 사이 단조, 비정상 입력은 멈춤으로", () => {
+  assert.ok(Math.abs(handSpeedGain(0) - HAND_STILL) < 1e-12);
+  assert.ok(Math.abs(handSpeedGain(HAND_SPEED_MIN) - HAND_STILL) < 1e-12);
+  assert.equal(handSpeedGain(HAND_SPEED_FULL), 1); assert.equal(handSpeedGain(5000), 1);
+  const mid = handSpeedGain((HAND_SPEED_MIN + HAND_SPEED_FULL) / 2);
+  assert.ok(mid > HAND_STILL && mid < 1);
+  assert.ok(Math.abs(handSpeedGain(NaN) - HAND_STILL) < 1e-12);
+});
+
+test("handMotion: 지터(≤MIN)는 0, FULL 이상 1, 사이 선형·단조, 비정상 입력 0", () => {
+  assert.equal(handMotion(0), 0); assert.equal(handMotion(HAND_SPEED_MIN), 0);
+  assert.equal(handMotion(HAND_SPEED_FULL), 1); assert.equal(handMotion(9999), 1);
+  const a = handMotion(200), b = handMotion(400);
+  assert.ok(a > 0 && b > a && b < 1);
+  assert.equal(handMotion(NaN), 0);
+  assert.ok(Math.abs(handSpeedGain(300) - (HAND_STILL + (1 - HAND_STILL) * handMotion(300))) < 1e-12);
 });
